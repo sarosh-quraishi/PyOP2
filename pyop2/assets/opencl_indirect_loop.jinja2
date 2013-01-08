@@ -97,7 +97,7 @@ for (i_1 = 0; i_1 < {{ arg.data.cdim }}; ++i_1)
 
 {%- macro kernel_stub() -%}
 __kernel
-__attribute__((reqd_work_group_size({{ launch.work_group_size }}, 1, 1)))
+__attribute__((reqd_work_group_size(1, 1, 1)))
 void {{ parloop._stub_name }}(
   {%- for arg in parloop._unique_dat_args %}
   __global {{ arg.data._cl_type }}* {{ arg._name }},
@@ -107,6 +107,9 @@ void {{ parloop._stub_name }}(
   {%- endfor -%}
   {% for arg in parloop._all_global_reduction_args %}
   __global {{ arg.data._cl_type }}* {{ arg._name }},
+  {%- endfor -%}
+  {% for m in parloop._unique_maps %}
+  __global int* {{ m._name }},
   {%- endfor -%}
   {% for c in op2const %}
   __constant {{ c._cl_type }}* {{ c.name }},
@@ -120,33 +123,15 @@ void {{ parloop._stub_name }}(
   __global int* {{ matem.name }},
   {%- endfor -%}
   int set_size,
-  __global int* p_ind_map,
-  __global short *p_loc_map,
-  __global int* p_ind_sizes,
-  __global int* p_ind_offsets,
   __global int* p_blk_map,
   __global int* p_offset,
   __global int* p_nelems,
-  __global int* p_nthrcol,
-  __global int* p_thrcol,
   __private int block_offset
 ) {
-  __local char shared [{{ launch.local_memory_size }}] __attribute__((aligned(sizeof(long))));
-  __local int shared_memory_offset;
-  __local int active_threads_count;
-
-  int nbytes;
   int block_id;
-
   int i_1;
-
-{%- if(parloop._requires_coloring) %}
-  __local int colors_count;
-  __local int active_threads_count_ceiling;
-  int color_1;
-  int color_2;
-  int i_2;
-{% endif %}
+  int nelem;
+  int felem;
 
 {%- if(parloop._unique_indirect_dat_args) %}
   // reduction args
@@ -183,12 +168,6 @@ void {{ parloop._stub_name }}(
   {% endfor %}
 {% endif %}
 
-  // shared indirection mappings
-{%- for arg in parloop._unique_indirect_dat_args %}
-  __global int* __local {{ arg._map_name }};
-  __local int {{ arg._size_name }};
-  __local {{ arg.data._cl_type }}* __local {{ arg._shared_name }};
-{%- endfor %}
 {% for arg  in parloop._all_non_inc_vec_map_args %}
   __local {{ arg.data._cl_type }}* {{ arg._vec_name }}[{{ arg.map.dim }}];
 {%- endfor %}
@@ -202,34 +181,13 @@ void {{ parloop._stub_name }}(
   {{ arg.data._cl_type }}* {{ arg._vec_name }}[{{ arg.map.dim }}];
 {%- endfor %}
 
-  if (get_local_id(0) == 0) {
-    block_id = p_blk_map[get_group_id(0) + block_offset];
-    active_threads_count = p_nelems[block_id];
+
+  block_id = p_blk_map[get_group_id(0) + block_offset];
+  nelem = p_nelems[block_id];
+  felem = {{ launch.partition_size }} * block_id;
 {%- if(parloop._requires_coloring) %}
-    active_threads_count_ceiling = get_local_size(0) * (1 + (active_threads_count - 1) / get_local_size(0));
     colors_count = p_nthrcol[block_id];
 {%- endif %}
-    shared_memory_offset = p_offset[block_id];
-    {% for arg in parloop._unique_indirect_dat_args -%}
-    {{ arg._size_name }} = p_ind_sizes[{{loop.index0}} + block_id * {{ loop.length }}];
-    {{ arg._map_name }} = &p_ind_map[{{arg._which_indirect}} * set_size] + p_ind_offsets[{{loop.index0}} + block_id * {{loop.length}}];
-{%- endfor %}
-
-    nbytes = 0;
-{%- for arg in parloop._unique_indirect_dat_args %}
-    {{ arg._shared_name }} = (__local {{ arg.data._cl_type }}*) (&shared[nbytes]);
-    nbytes += ROUND_UP({{arg._size_name }} * {{ arg.data.cdim }} * sizeof({{ arg.data._cl_type }}));
-{%- endfor %}
-  }
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-{% if(parloop._unique_read_or_rw_indirect_dat_args) -%}
-  // staging in of indirect dats
-  {% for arg in parloop._unique_read_or_rw_indirect_dat_args %}
-  {{ stagingin(arg) }}
-  {% endfor %}
-  barrier(CLK_LOCAL_MEM_FENCE);
-{% endif %}
 
 {%- if(parloop._unique_inc_indirect_dat_args) %}
   // zeroing local memory for indirect reduction
@@ -246,20 +204,8 @@ void {{ parloop._stub_name }}(
   {% endfor %}
 {% endif %}
 
-{%- if(parloop._requires_coloring) %}
-  for (i_1 = get_local_id(0); i_1 < active_threads_count_ceiling; i_1 += get_local_size(0)) {
-    color_2 = -1;
-    if (i_1 < active_threads_count) {
-      {% for arg in parloop._all_inc_indirect_dat_args %}
-      {{ staged_arg_local_variable_zeroing(arg) | indent(6) }}
-      {%- endfor %}
-
-      {{ kernel_call() | indent(6) }}
-      color_2 = p_thrcol[i_1 + shared_memory_offset];
-    }
-    for (color_1 = 0; color_1 < colors_count; ++color_1) {
-      // should there be a if + barrier pattern for each indirect reduction argument ?
-      if (color_2 == color_1) {
+  for (i_1 = felem; i_1 < (felem + nelem); i_1++) {
+        {{ kernel_call() | indent(6) }}
         {% for arg in parloop._all_inc_non_vec_map_indirect_dat_args %}
         {{ color_reduction(arg) | indent(8) }}
         {% endfor %}
@@ -276,27 +222,11 @@ void {{ parloop._stub_name }}(
         {%- endfor %}
             {{ matrix_insert() }}
         {% endif %}
-      }
-      barrier(CLK_LOCAL_MEM_FENCE);
-    }
   }
-{%- else %}
-  for (i_1 = get_local_id(0); i_1 < active_threads_count; i_1 += get_local_size(0)) {
-    {{ kernel_call() | indent(6) }}
-  }
-{%- endif %}
 
 {%- if(parloop._unique_inc_indirect_dat_args) %}
   {% for arg in parloop._unique_inc_indirect_dat_args %}
   {{ work_group_reduction(arg) | indent(2) }}
-  {%- endfor %}
-{%- endif %}
-
-{%- if(parloop._unique_write_or_rw_indirect_dat_args) %}
-  // staging out indirect dats
-  barrier(CLK_LOCAL_MEM_FENCE);
-  {% for arg in parloop._unique_write_or_rw_indirect_dat_args %}
-  {{ stagingout(arg) | indent(2) }}
   {%- endfor %}
 {%- endif %}
 
@@ -407,7 +337,7 @@ for (int i{{ loop.index0 }}=0; i{{ loop.index0 }}<{{ dim }}; ++i{{ loop.index0 }
 {%- elif(arg._is_global) -%}
   {{ arg.data.name }}
 {%- else -%}
-&{{ arg._shared_name }}[p_loc_map[i_1 + shared_memory_offset + {{arg._which_indirect}}*set_size] * {{ arg.data.cdim }}]
+&{{ arg._name }}[{{ arg._map._name }}[i_1 * {{ arg._map.dim }} + {{ arg.idx }}]]
 {%- endif -%}
 {%- endmacro -%}
 

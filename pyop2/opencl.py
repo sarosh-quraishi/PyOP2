@@ -448,6 +448,10 @@ class Solver(op2.Solver):
 
 class ParLoop(op2.ParLoop):
     @property
+    def _unique_maps(self):
+        return uniquify(a.map for a in self.args if a._is_indirect)
+
+    @property
     def _matrix_args(self):
         return [a for a in self.args if a._is_mat]
 
@@ -553,7 +557,9 @@ class ParLoop(op2.ParLoop):
                 else: # indirect loop
                     if arg._is_direct or (arg._is_global and not arg._is_global_reduction):
                         i = ("__global", None)
-                    elif (arg._is_indirect or arg._is_vec_map) and not arg._is_indirect_reduction:
+                    elif (arg._is_indirect and not arg._is_vec_map and not arg._is_indirect_reduction):
+                        i = ("__global", None)
+                    elif arg._is_vec_map and not arg._is_indirect_reduction:
                         i = ("__local", None)
                     else:
                         i = ("__private", None)
@@ -624,6 +630,10 @@ class ParLoop(op2.ParLoop):
             a.data._allocate_reduction_array(conf['work_group_count'])
             self._fun.append_arg(a.data._d_reduc_buffer)
 
+        for m in self._unique_maps:
+            m._to_device()
+            self._fun.append_arg(m._device_values.data)
+
         for cst in Const._definitions():
             self._fun.append_arg(cst._array.data)
 
@@ -643,15 +653,9 @@ class ParLoop(op2.ParLoop):
             cl.enqueue_nd_range_kernel(_queue, self._fun, (conf['thread_count'],), (conf['work_group_size'],), g_times_l=False).wait()
         else:
             self._fun.append_arg(np.int32(self._it_space.size))
-            self._fun.append_arg(self._plan.ind_map.data)
-            self._fun.append_arg(self._plan.loc_map.data)
-            self._fun.append_arg(self._plan.ind_sizes.data)
-            self._fun.append_arg(self._plan.ind_offs.data)
             self._fun.append_arg(self._plan.blkmap.data)
             self._fun.append_arg(self._plan.offset.data)
             self._fun.append_arg(self._plan.nelems.data)
-            self._fun.append_arg(self._plan.nthrcol.data)
-            self._fun.append_arg(self._plan.thrcol.data)
 
             block_offset = 0
             for i in range(self._plan.ncolors):
