@@ -70,7 +70,7 @@ def compile_form(form, name):
         code = ffc_compile_form(form, prefix=name, parameters=ffc_parameters)
         form_data = form.form_data()
 
-        kernels = [ Kernel(code, '%s_%s_integral_0_%s' % (name, m.domain_type(), m.domain_id())) \
+        kernels = [ Kernel(code['formatted_code'], '%s_%s_integral_0_%s' % (name, m.domain_type(), m.domain_id())) \
                     for m in map(lambda x: x.measure(), form.integrals()) ]
         kernels = tuple(kernels)
         _form_cache[key] = kernels, form_data
