@@ -44,6 +44,7 @@ import op_lib_core as core
 import runtime_base as rt
 from runtime_base import *
 import device
+import llvm_vec
 
 # hard coded value to max openmp threads
 _max_threads = 32
@@ -63,6 +64,10 @@ class Mat(rt.Mat):
 
 def par_loop(kernel, it_space, *args):
     """Invocation of an OP2 kernel with an access descriptor"""
+    for arg in *args:
+        if arg._is_soa or arg._uses_itspace or arg._is_vec_map:
+            assert False, "Unsupported argument type."
+
     ParLoop(kernel, it_space, *args).compute()
 
 class ParLoop(device.ParLoop):
@@ -383,6 +388,29 @@ class ParLoop(device.ParLoop):
         else:
             _const_args = ''
         _const_inits = ';\n'.join([c_const_init(c) for c in Const._definitions()])
+
+        _kernel_name_vectorised = self._kernel_name + '_vectorised'
+        _kernel_vectorised_arg_types = list()
+        _kernel_vectorised_args = list()
+        for arg in args:
+            if arg._is_direct:
+                _kernel_vectorised_args.append(c_arg_name(arg))
+                _kernel_vectorised_arg_types.append(arg.ctype + '*')
+            elif arg._is_global_reduction:
+                _kernel_vectorised_args.append( "%(name)s_l[tid]" % {'name': c_arg_name(arg)} )
+                _kernel_vectorised_arg_types.append(arg.ctype + '*')
+            elif arg._is_global:
+                _kernel_vectorised_args.append(c_arg_name(arg))
+                _kernel_vectorised_arg_types.append(arg.ctype + '*')
+            elif arg._is_indirect:
+                _kernel_vectorised_args.append(c_arg_name(arg))
+                _kernel_vectorised_arg_types.append(arg.ctype + '*')
+                _kernel_vectorised_args.append(c_map_name(arg))
+                _kernel_vectorised_arg_types.append('int*')
+
+        _kernel_vectorised_arg_types = ', '.join(_kernel_vectorised_arg_types)
+        _kernel_vectorised_args = ', '.join(_kernel_vectorised_args)
+
         wrapper = """
             void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s, PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap, PyObject* _ncolblk, PyObject* _nelems) {
 
@@ -425,15 +453,8 @@ class ParLoop(device.ParLoop):
                   int bid = blkmap[__b];
                   int nelem = nelems[bid];
                   int efirst = bid * part_size;
-                  for (int i = efirst; i < (efirst + nelem); i++ ) {
-                    %(vec_inits)s;
-                    %(itspace_loops)s
-                    %(zero_tmps)s;
-                    %(kernel_name)s(%(kernel_args)s);
-                    %(addtos_vector_field)s;
-                    %(itspace_loop_close)s
-                    %(addtos_scalar_field)s;
-                  }
+
+                  %(kernel_name)s(efirst, nelem, %(kernel_vectorised_args)s);
                 }
               }
               %(reduction_finalisations)s
@@ -452,6 +473,11 @@ class ParLoop(device.ParLoop):
             kernel_code = """
             inline %(code)s
             """ % {'code' : self._kernel.code }
+
+        extern = """
+                 extern void %(kernel_name_vectorised)s(int, int,  %(kernel_vectorised_arg_types)s);
+                 """ % {'kernel_name_vectorised': _kernel_name_vectorised, 'kernel_vectorised_arg_types': _kernel_vectorised_arg_types}
+
         code_to_compile =  wrapper % { 'kernel_name' : self._kernel.name,
                                        'wrapper_args' : _wrapper_args,
                                        'wrapper_decs' : _wrapper_decs,
@@ -472,18 +498,23 @@ class ParLoop(device.ParLoop):
                                        'assembles' : _assembles,
                                        'reduction_decs' : _reduction_decs,
                                        'reduction_inits' : _reduction_inits,
-                                       'reduction_finalisations' : _reduction_finalisations}
+                                       'reduction_finalisations' : _reduction_finalisations,
+                                       'kernel_name_vectorised': _kernel_name_vectorised,
+                                       'kernel_vectorised_args': _kernel_vectorised_args,}
+
+        # call external library to generate vectorised kernel code
+        llvm_vec.llvm_vec(self.kernel, *args)
 
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
-        _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,
+        _fun = inline_with_numpy(code_to_compile, additional_declarations = [kernel_code, extern],
                                  additional_definitions = _const_decs + kernel_code,
                                  include_dirs=[OP2_INC, get_petsc_dir()+'/include'],
                                  source_directory=os.path.dirname(os.path.abspath(__file__)),
                                  wrap_headers=["mat_utils.h"],
                                  library_dirs=[OP2_LIB, get_petsc_dir()+'/lib'],
-                                 libraries=['op2_seq', 'petsc'],
+                                 libraries=['op2_seq', 'petsc', self._kernel_name],
                                  sources=["mat_utils.cxx"],
                                  cppargs=['-fopenmp'],
                                  system_headers=['omp.h'],
