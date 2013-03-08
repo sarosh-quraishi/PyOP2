@@ -453,7 +453,7 @@ class ParLoop(device.ParLoop):
                   int nelem = nelems[bid];
                   int efirst = bid * part_size;
 
-                  %(kernel_name)s(efirst, nelem, %(kernel_vectorised_args)s);
+                  %(kernel_name_vectorised)s(efirst, nelem, %(kernel_vectorised_args)s);
                 }
               }
               %(reduction_finalisations)s
