@@ -7,7 +7,7 @@ def llvm_vectorize(kernel, *args):
     cdef llvm.pyop2_arg_t* a
 
     k.name = kernel.name
-    k.src = kernel.src
+    k.src = kernel.code
 
     def arg_type(arg):
         if arg.is_direct:
