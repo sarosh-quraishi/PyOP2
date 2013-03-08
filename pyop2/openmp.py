@@ -388,7 +388,7 @@ class ParLoop(device.ParLoop):
             _const_args = ''
         _const_inits = ';\n'.join([c_const_init(c) for c in Const._definitions()])
 
-        _kernel_name_vectorised = self._kernel_name + '_vectorised'
+        _kernel_name_vectorised = self._kernel._name + '_vectorised'
         _kernel_vectorised_arg_types = list()
         _kernel_vectorised_args = list()
         for arg in args:
