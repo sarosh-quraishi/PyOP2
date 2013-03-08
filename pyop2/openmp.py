@@ -513,7 +513,7 @@ class ParLoop(device.ParLoop):
                                  source_directory=os.path.dirname(os.path.abspath(__file__)),
                                  wrap_headers=["mat_utils.h"],
                                  library_dirs=[OP2_LIB, get_petsc_dir()+'/lib'],
-                                 libraries=['op2_seq', 'petsc', self._kernel_name],
+                                 libraries=['op2_seq', 'petsc', self._kernel._name],
                                  sources=["mat_utils.cxx"],
                                  cppargs=['-fopenmp'],
                                  system_headers=['omp.h'],
