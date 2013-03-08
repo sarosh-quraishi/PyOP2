@@ -42,7 +42,7 @@ def llvm_vectorize(kernel, *args):
         return conv[arg.access]
 
     a = <llvm.pyop2_arg_t*> malloc(sizeof(llvm.pyop2_arg_t) * len(args))
-    for i, arg in enumerate(*args):
+    for i, arg in enumerate(args):
         a[i].type = arg_type(arg)
         a[i].dat_ctype = dat_ctype(arg)
         a[i].dat_dim = arg.data.cdim
@@ -50,5 +50,5 @@ def llvm_vectorize(kernel, *args):
         a[i].index = arg.index
         a[i].access = arg_access(arg)
 
-    llvm.llvm_vectorize(&k, <int> len(*args), a)
+    llvm.llvm_vectorize(&k, <int> len(args), a)
     free(a)
