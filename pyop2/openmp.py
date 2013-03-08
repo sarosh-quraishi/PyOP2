@@ -409,8 +409,13 @@ class ParLoop(device.ParLoop):
 
         _kernel_vectorised_arg_types = ', '.join(_kernel_vectorised_arg_types)
         _kernel_vectorised_args = ', '.join(_kernel_vectorised_args)
+        extern = """
+    extern void %(kernel_name_vectorised)s(int, int,  %(kernel_vectorised_arg_types)s);
+    """ % {'kernel_name_vectorised': _kernel_name_vectorised, 'kernel_vectorised_arg_types': _kernel_vectorised_arg_types}
 
         wrapper = """
+            %(extern)s
+
             void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s, PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap, PyObject* _ncolblk, PyObject* _nelems) {
 
             int part_size = (int)PyInt_AsLong(_part_size);
@@ -475,10 +480,6 @@ class ParLoop(device.ParLoop):
 
             """ % {'code' : self._kernel.code }
 
-        extern = """
-                 extern void %(kernel_name_vectorised)s(int, int,  %(kernel_vectorised_arg_types)s);
-                 """ % {'kernel_name_vectorised': _kernel_name_vectorised, 'kernel_vectorised_arg_types': _kernel_vectorised_arg_types}
-
         code_to_compile =  wrapper % { 'kernel_name' : self._kernel.name,
                                        'wrapper_args' : _wrapper_args,
                                        'wrapper_decs' : _wrapper_decs,
@@ -501,7 +502,8 @@ class ParLoop(device.ParLoop):
                                        'reduction_inits' : _reduction_inits,
                                        'reduction_finalisations' : _reduction_finalisations,
                                        'kernel_name_vectorised': _kernel_name_vectorised,
-                                       'kernel_vectorised_args': _kernel_vectorised_args,}
+                                       'kernel_vectorised_args': _kernel_vectorised_args,
+                                       'extern': extern}
 
         # call external library to generate vectorised kernel code
         core.llvm_vectorize(self.kernel, *args)
@@ -509,7 +511,7 @@ class ParLoop(device.ParLoop):
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
-        _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code + extern,
+        _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,
                                  additional_definitions = _const_decs + kernel_code,
                                  include_dirs=[OP2_INC, get_petsc_dir()+'/include'],
                                  source_directory=os.path.dirname(os.path.abspath(__file__)),
