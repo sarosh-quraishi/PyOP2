@@ -10,9 +10,9 @@ def llvm_vectorize(kernel, *args):
     k.src = kernel.code
 
     def arg_type(arg):
-        if arg.is_direct:
+        if arg._is_direct:
             return llvm.PYOP2_DIRECT
-        elif arg.is_global:
+        elif arg._is_global:
             return llvm.PYOP2_GLOBAL
         else:
             return llvm.PYOP2_INDIRECT
