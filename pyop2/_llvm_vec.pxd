@@ -24,4 +24,4 @@ cdef extern from "llvm_vec.h":
         int index
         pyop2_access_t access
 
-    void llvm_vectorize(pyop2_kernel_t*, pyop2_arg_t*)
+    void llvm_vectorize(pyop2_kernel_t*, int nargs, pyop2_arg_t*)

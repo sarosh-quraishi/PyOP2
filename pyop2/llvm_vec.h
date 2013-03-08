@@ -53,6 +53,6 @@ typedef struct {
 } pyop2_arg_t;
 
 void
-llvm_vectorize(pyop2_kernel_t*, pyop2_arg_t*);
+llvm_vectorize(pyop2_kernel_t*, int, pyop2_arg_t*);
 
 #endif /* LLVM_VEC_H */

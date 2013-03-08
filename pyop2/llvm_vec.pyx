@@ -50,5 +50,5 @@ def llvm_vectorize(kernel, *args):
         a[i].index = arg.index
         a[i].access = arg_access(arg)
 
-    llvm.llvm_vectorize(&k, a)
+    llvm.llvm_vectorize(&k, <int> len(*args), a)
     free(a)
