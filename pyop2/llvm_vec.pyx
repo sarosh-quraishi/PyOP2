@@ -1,3 +1,4 @@
+from pyop2.runtime_base import READ, WRITE, RW, INC, MIN, MAX
 from libc.stdlib cimport malloc, free
 cimport _llvm_vec as llvm
 
@@ -32,12 +33,12 @@ def llvm_vectorize(kernel, *args):
         return conv[arg.data.dtype.name]
 
     def arg_access(arg):
-        conv = { OP_READ: llvm.PYOP2_READ,
-                 OP_WRITE: llvm.PYOP2_WRITE,
-                 OP_RW: llvm.PYOP2_RW,
-                 OP_INC: llvm.PYOP2_INC,
-                 OP_MIN: llvm.PYOP2_MIN,
-                 OP_MAX: llvm.PYOP2_MAX }
+        conv = { READ: llvm.PYOP2_READ,
+                 WRITE: llvm.PYOP2_WRITE,
+                 RW: llvm.PYOP2_RW,
+                 INC: llvm.PYOP2_INC,
+                 MIN: llvm.PYOP2_MIN,
+                 MAX: llvm.PYOP2_MAX }
         return conv[arg.access]
 
     a = <llvm.pyop2_arg_t*> malloc(sizeof(llvm.pyop2_arg_t) * len(*args))
