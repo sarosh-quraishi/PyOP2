@@ -50,7 +50,7 @@ try:
                              include_dirs=['pyop2', OP2_INC, numpy.get_include()],
                              library_dirs=[OP2_LIB, LLVMJ_LIB],
                              runtime_library_dirs=[OP2_LIB, LLVMJ_LIB],
-                             libraries=["op2_seq"])]
+                             libraries=["op2_seq", "llvm_vec"])]
 # Else we require the Cython-compiled .c file to be present and use that
 except ImportError:
     cmdclass = {}
@@ -59,7 +59,7 @@ except ImportError:
                              include_dirs=['pyop2', OP2_INC, numpy.get_include()],
                              library_dirs=[OP2_LIB, LLVMJ_LIB],
                              runtime_library_dirs=[OP2_LIB, LLVMJ_LIB],
-                             libraries=["op2_seq"])]
+                             libraries=["op2_seq", "llvm_vec"])]
 
 setup_requires = [
         'numpy>=1.6',
