@@ -512,7 +512,7 @@ class ParLoop(device.ParLoop):
                                  include_dirs=[OP2_INC, get_petsc_dir()+'/include'],
                                  source_directory=os.path.dirname(os.path.abspath(__file__)),
                                  wrap_headers=["mat_utils.h"],
-                                 library_dirs=[OP2_LIB, get_petsc_dir()+'/lib'],
+                                 library_dirs=[OP2_LIB, get_petsc_dir()+'/lib', LLVMJ_GEN],
                                  libraries=['op2_seq', 'petsc', self._kernel._name],
                                  sources=["mat_utils.cxx"],
                                  cppargs=['-fopenmp'],
