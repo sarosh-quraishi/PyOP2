@@ -44,7 +44,6 @@ import op_lib_core as core
 import runtime_base as rt
 from runtime_base import *
 import device
-import llvm_vec
 
 # hard coded value to max openmp threads
 _max_threads = 32
@@ -503,7 +502,7 @@ class ParLoop(device.ParLoop):
                                        'kernel_vectorised_args': _kernel_vectorised_args,}
 
         # call external library to generate vectorised kernel code
-        llvm_vec.llvm_vec(self.kernel, *args)
+        core.llvm_vec(self.kernel, *args)
 
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')
