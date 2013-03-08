@@ -64,7 +64,7 @@ class Mat(rt.Mat):
 
 def par_loop(kernel, it_space, *args):
     """Invocation of an OP2 kernel with an access descriptor"""
-    for arg in *args:
+    for arg in args:
         if arg._is_soa or arg._uses_itspace or arg._is_vec_map:
             assert False, "Unsupported argument type."
 
