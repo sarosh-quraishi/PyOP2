@@ -2,8 +2,8 @@ from libc.stdlib cimport malloc, free
 cimport _llvm_vec as llvm
 
 def llvm_vectorize(kernel, *args):
-    cdef pyop2_kernel_t k
-    cdef pyop2_arg_t* a
+    cdef llvm.pyop2_kernel_t k
+    cdef llvm.pyop2_arg_t* a
 
     k.name = kernel.name
     k.src = kernel.src
