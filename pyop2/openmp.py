@@ -467,10 +467,12 @@ class ParLoop(device.ParLoop):
             #define OP2_STRIDE(a, idx) a[idx]
             inline %(code)s
             #undef OP2_STRIDE
+
             """ % {'code' : self._kernel.code}
         else:
             kernel_code = """
             inline %(code)s
+
             """ % {'code' : self._kernel.code }
 
         extern = """
@@ -507,7 +509,7 @@ class ParLoop(device.ParLoop):
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
-        _fun = inline_with_numpy(code_to_compile, additional_declarations = [kernel_code, extern],
+        _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code + extern,
                                  additional_definitions = _const_decs + kernel_code,
                                  include_dirs=[OP2_INC, get_petsc_dir()+'/include'],
                                  source_directory=os.path.dirname(os.path.abspath(__file__)),
