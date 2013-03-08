@@ -10,37 +10,37 @@ def llvm_vectorize(kernel, *args):
 
     def arg_type(arg):
         if arg.is_direct:
-            return PYOP2_DIRECT
+            return llvm.PYOP2_DIRECT
         elif arg.is_global:
-            return PYOP2_GLOBAL
+            return llvm.PYOP2_GLOBAL
         else:
-            return PYOP2_INDIRECT
+            return llvm.PYOP2_INDIRECT
 
     def dat_ctype(arg):
-        conv = { "bool": PYOP2_UCHAR,
-                 "int8": PYOP2_CHAR,
-                 "int16": PYOP2_SHORT,
-                 "int32": PYOP2_INT,
-                 "int64": PYOP2_LLONG,
-                 "uint8": PYOP2_UCHAR,
-                 "uint16": PYOP2_USHORT,
-                 "uint32": PYOP2_UINT,
-                 "uint64": PYOP2_ULLONG,
-                 "float": PYOP2_DOUBLE,
-                 "float32": PYOP2_FLOAT,
-                     "float64": PYOP2_DOUBLE }
+        conv = { "bool": llvm.PYOP2_UCHAR,
+                 "int8": llvm.PYOP2_CHAR,
+                 "int16": llvm.PYOP2_SHORT,
+                 "int32": llvm.PYOP2_INT,
+                 "int64": llvm.PYOP2_LLONG,
+                 "uint8": llvm.PYOP2_UCHAR,
+                 "uint16": llvm.PYOP2_USHORT,
+                 "uint32": llvm.PYOP2_UINT,
+                 "uint64": llvm.PYOP2_ULLONG,
+                 "float": llvm.PYOP2_DOUBLE,
+                 "float32": llvm.PYOP2_FLOAT,
+                     "float64": llvm.PYOP2_DOUBLE }
         return conv[arg.data.dtype.name]
 
     def arg_access(arg):
-        conv = { OP_READ: PYOP2_READ,
-                 OP_WRITE: PYOP2_WRITE,
-                 OP_RW: PYOP2_RW,
-                 OP_INC: PYOP2_INC,
-                 OP_MIN: PYOP2_MIN,
-                 OP_MAX: PYOP2_MAX }
+        conv = { OP_READ: llvm.PYOP2_READ,
+                 OP_WRITE: llvm.PYOP2_WRITE,
+                 OP_RW: llvm.PYOP2_RW,
+                 OP_INC: llvm.PYOP2_INC,
+                 OP_MIN: llvm.PYOP2_MIN,
+                 OP_MAX: llvm.PYOP2_MAX }
         return conv[arg.access]
 
-    a = <pyop2_arg_t*> malloc(sizeof(pyop2_arg_t) * len(*args))
+    a = <llvm.pyop2_arg_t*> malloc(sizeof(llvm.pyop2_arg_t) * len(*args))
     for i, arg in enumerate(*args):
         a[i].type = arg_type(arg)
         a[i].dat_ctype = dat_ctype(arg)
@@ -49,5 +49,5 @@ def llvm_vectorize(kernel, *args):
         a[i].index = arg.index
         a[i].access = arg_access(arg)
 
-    llvm.llvm_vectorize(k, a)
+    llvm.llvm_vectorize(&k, a)
     free(a)
