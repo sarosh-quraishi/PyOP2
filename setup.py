@@ -48,8 +48,8 @@ try:
     ext_modules = [Extension('pyop2.op_lib_core',
                              ['pyop2/op_lib_core.pyx', 'pyop2/_op_lib_core.pxd', 'pyop2/sparsity_utils.cxx'],
                              include_dirs=['pyop2', OP2_INC, numpy.get_include()],
-                             library_dirs=[OP2_LIB],
-                             runtime_library_dirs=[OP2_LIB],
+                             library_dirs=[OP2_LIB, LLVMJ_LIB],
+                             runtime_library_dirs=[OP2_LIB, LLVMJ_LIB],
                              libraries=["op2_seq"])]
 # Else we require the Cython-compiled .c file to be present and use that
 except ImportError:
@@ -57,8 +57,8 @@ except ImportError:
     ext_modules = [Extension('pyop2.op_lib_core',
                              ['pyop2/op_lib_core.c', 'pyop2/sparsity_utils.cxx'],
                              include_dirs=['pyop2', OP2_INC, numpy.get_include()],
-                             library_dirs=[OP2_LIB],
-                             runtime_library_dirs=[OP2_LIB],
+                             library_dirs=[OP2_LIB, LLVMJ_LIB],
+                             runtime_library_dirs=[OP2_LIB, LLVMJ_LIB],
                              libraries=["op2_seq"])]
 
 setup_requires = [

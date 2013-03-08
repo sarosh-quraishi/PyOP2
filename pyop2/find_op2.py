@@ -34,6 +34,8 @@
 import os, sys
 
 try:
+    LLVMJ_DIR = os.environ['LLVMJ']
+    LLVMJ_LIB = LLVMJ_DIR + '/lib'
     OP2_DIR = os.environ['OP2_DIR']
     OP2_INC = OP2_DIR + '/c/include'
     OP2_LIB = OP2_DIR + '/c/lib'
