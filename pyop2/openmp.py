@@ -36,6 +36,7 @@
 import os
 import numpy as np
 import math
+import copy
 
 from exceptions import *
 from find_op2 import *
@@ -510,7 +511,10 @@ class ParLoop(device.ParLoop):
                                        'extern': extern}
 
         # call external library to generate vectorised kernel code
-        core.llvm_vectorize(_const_defs + self.kernel, *args)
+        # temporary workaround
+        k = copy.deepcopy(self.kernel)
+        k._code = _const_defs + k.code
+        core.llvm_vectorize(k, *args)
 
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')
