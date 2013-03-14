@@ -353,6 +353,8 @@ class ParLoop(device.ParLoop):
 
         _const_decs = '\n'.join([const._format_declaration() for const in Const._definitions()]) + '\n'
 
+        _const_defs = '\n'.join([const._format_extern_declaration() for const in Const._definitions()]) + '\n'
+
         _kernel_user_args = [c_kernel_arg(arg) for arg in args]
         _kernel_it_args   = ["i_%d" % d for d in range(len(self._it_space.extents))]
         _kernel_args = ', '.join(_kernel_user_args + _kernel_it_args)
@@ -506,7 +508,7 @@ class ParLoop(device.ParLoop):
                                        'extern': extern}
 
         # call external library to generate vectorised kernel code
-        core.llvm_vectorize(self.kernel, *args)
+        core.llvm_vectorize(_const_defs + self.kernel, *args)
 
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')

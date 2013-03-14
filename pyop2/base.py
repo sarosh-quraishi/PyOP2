@@ -462,9 +462,20 @@ class Const(DataCarrier):
              'dim' : self.cdim}
 
         if self.cdim == 1:
-            return "static %(type)s %(name)s;" % d
+            return "%(type)s %(name)s;" % d
 
-        return "static %(type)s %(name)s[%(dim)s];" % d
+        return "%(type)s %(name)s[%(dim)s];" % d
+
+    def _format_extern_declaration(self):
+        d = {'type' : self.ctype,
+             'name' : self.name,
+             'dim' : self.cdim}
+
+        if self.cdim == 1:
+            return "extern %(type)s %(name)s;" % d
+
+        return "extern %(type)s %(name)s[%(dim)s];" % d
+        
 
 class Global(DataCarrier):
     """OP2 global value.
