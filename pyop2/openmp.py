@@ -416,6 +416,8 @@ class ParLoop(device.ParLoop):
     """ % {'kernel_name_vectorised': _kernel_name_vectorised, 'kernel_vectorised_arg_types': _kernel_vectorised_arg_types}
 
         wrapper = """
+            void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s, PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap, PyObject* _ncolblk, PyObject* _nelems);
+
             %(extern)s
 
             void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s, PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap, PyObject* _ncolblk, PyObject* _nelems) {
