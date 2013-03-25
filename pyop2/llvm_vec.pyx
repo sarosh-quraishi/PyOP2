@@ -46,7 +46,7 @@ def llvm_vectorize(kernel, *args):
         a[i].type = arg_type(arg)
         a[i].dat_ctype = dat_ctype(arg)
         a[i].dat_dim = arg.data.cdim
-        a[i].map_dim = arg.map.dim
+        a[i].map_dim = arg.map.dim if arg.map is not None else -1
         a[i].index = arg.idx if arg.idx is not None else 0
         a[i].access = arg_access(arg)
 
