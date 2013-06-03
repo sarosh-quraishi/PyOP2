@@ -1,5 +1,7 @@
-__device__ int pos(int row, int col, int* rowptr, int* colidx)
+__device__ int pos(int row, int col, int* rowptr, int* colidx, int nrows)
 {
+  if (row >= nrows) return INT_MAX;
+
   for ( int k = rowptr[row]; k < rowptr[row+1]; k++ )
     if ( colidx[k] == col )
       return k;
@@ -28,6 +30,7 @@ __global__ void __lma_to_csr({{type}} *lmadata,
                              {{type}} *csrdata,
                              int *rowptr,
                              int *colidx,
+                             int nrows,
                              int *rowmap,
                              int rowmapdim,
                              int *colmap,
@@ -44,15 +47,17 @@ __global__ void __lma_to_csr({{type}} *lmadata,
 
     int offset = pos(rowmap[e * rowmapdim + i],
                      colmap[e * colmapdim + j],
-                     rowptr, colidx);
+                     rowptr, colidx, nrows);
 
-    __atomic_add(csrdata + offset, lmadata[n]);
+    if (offset != INT_MAX) __atomic_add(csrdata + offset,
+                                        lmadata[n]);
 }
 
 __global__ void __lma_to_csr_vector({{type}} *lmadata,
                                     {{type}} *csrdata,
                                     int *rowptr,
                                     int *colidx,
+                                    int nrows,
                                     int *rowmap,
                                     int rowmapdim,
                                     int rmult,
@@ -74,8 +79,9 @@ __global__ void __lma_to_csr_vector({{type}} *lmadata,
     for ( int k = 0; k < rmult; ++k ) {
         for ( int l = 0; l < cmult; ++l ) {
             int offset = pos(row + k, col + l,
-                             rowptr, colidx);
-            __atomic_add(csrdata + offset, lmadata[n*rmult*cmult + k*cmult + l]);
+                             rowptr, colidx, nrows);
+            if (offset != INT_MAX) __atomic_add(csrdata + offset,
+                                                lmadata[n*rmult*cmult + k*cmult + l]);
         }
     }
 }

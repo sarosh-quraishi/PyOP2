@@ -244,8 +244,8 @@ class Mat(DeviceDataMixin, op2.Mat):
             mod = SourceModule(src, options=compiler_opts)
             sfun = mod.get_function('__lma_to_csr')
             vfun = mod.get_function('__lma_to_csr_vector')
-            sfun.prepare('PPPPPiPii')
-            vfun.prepare('PPPPPiiPiii')
+            sfun.prepare('PPPPiPiPii')
+            vfun.prepare('PPPPiPiiPiii')
             Mat._lma2csr_cache[self.dtype] = mod, sfun, vfun
 
         assert rowmap.iterset is colmap.iterset
@@ -260,6 +260,7 @@ class Mat(DeviceDataMixin, op2.Mat):
                    self._csrdata.gpudata,
                    self._rowptr.gpudata,
                    self._colidx.gpudata,
+                   np.int32(self._sparsity._rowptr.size),
                    rowmap._device_values.gpudata,
                    np.int32(rowmap.dim)]
         if self._is_scalar_field:
