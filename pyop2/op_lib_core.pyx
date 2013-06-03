@@ -568,13 +568,18 @@ def build_sparsity(object sparsity, bool parallel):
         if parallel:
             core.build_sparsity_pattern_mpi(rmult, cmult, nrows, nmaps,
                                             rmaps, cmaps, &d_nnz, &o_nnz,
+                                            &rowptr, &colidx,
                                             &d_nz, &o_nz)
             sparsity._d_nnz = data_to_numpy_array_with_spec(d_nnz, lsize,
                                                             np.NPY_INT32)
             sparsity._o_nnz = data_to_numpy_array_with_spec(o_nnz, lsize,
                                                             np.NPY_INT32)
-            sparsity._rowptr = []
-            sparsity._colidx = []
+            sparsity._rowptr = data_to_numpy_array_with_spec(rowptr,
+                                                             lsize+1,
+                                                             np.NPY_INT32)
+            sparsity._colidx = data_to_numpy_array_with_spec(colidx,
+                                                             rowptr[lsize],
+                                                             np.NPY_INT32)
             sparsity._d_nz = d_nz
             sparsity._o_nz = o_nz
         else:

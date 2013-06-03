@@ -228,8 +228,10 @@ class Mat(DeviceDataMixin, op2.Mat):
     @property
     def _csrdata(self):
         if not hasattr(self, '__csrdata'):
+            l = self._sparsity.nz
+            l += self._sparsity.onz if base.MPI.parallel else 0
             setattr(self, '__csrdata',
-                    gpuarray.zeros(shape=self._sparsity.nz,
+                    gpuarray.zeros(shape=l,
                                    dtype=self.dtype))
         return getattr(self, '__csrdata')
 

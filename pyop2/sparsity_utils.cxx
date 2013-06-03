@@ -53,6 +53,7 @@ void build_sparsity_pattern_seq ( int rmult, int cmult, int nrows, int nmaps,
 void build_sparsity_pattern_mpi ( int rmult, int cmult, int nrows, int nmaps,
                                   op_map * rowmaps, op_map * colmaps,
                                   int ** _d_nnz, int ** _o_nnz,
+                                  int ** _rowptr, int ** _colidx,
                                   int * _d_nz, int * _o_nz )
 {
   // Create and populate auxiliary data structure: for each element of
@@ -61,6 +62,7 @@ void build_sparsity_pattern_mpi ( int rmult, int cmult, int nrows, int nmaps,
   int lsize = nrows*rmult;
   std::vector< std::set< int > > s_diag(lsize);
   std::vector< std::set< int > > s_odiag(lsize);
+  std::vector< std::set< int > > s_fdiag(lsize);
 
   for ( int m = 0; m < nmaps; m++ ) {
     op_map rowmap = rowmaps[m];
@@ -77,8 +79,10 @@ void build_sparsity_pattern_mpi ( int rmult, int cmult, int nrows, int nmaps,
                 int entry = cmult * colmap->map[d + e * colmap->dim] + c;
                 if ( entry < lsize ) {
                   s_diag[row].insert(entry);
+                  s_fdiag[row].insert(entry);
                 } else {
                   s_odiag[row].insert(entry);
+                  s_fdiag[row].insert(entry);
                 }
               }
             }
@@ -92,14 +96,27 @@ void build_sparsity_pattern_mpi ( int rmult, int cmult, int nrows, int nmaps,
   int * d_nnz = (int*)malloc(lsize * sizeof(int));
   int * o_nnz = (int *)malloc(lsize * sizeof(int));
   int d_nz = 0, o_nz = 0;
+
+  int * rowptr = (int*)malloc((lsize+1) * sizeof(int));
+  rowptr[0] = 0;
+
   for ( int row = 0; row < lsize; ++row ) {
     d_nnz[row] = s_diag[row].size();
     d_nz += d_nnz[row];
     o_nnz[row] = s_odiag[row].size();
     o_nz += o_nnz[row];
+    rowptr[row+1] = rowptr[row] + s_fdiag[row].size();
   }
+
+  int * colidx = (int*)malloc(rowptr[lsize] * sizeof(int));
+  for ( int row = 0; row < lsize; ++row ) {
+    std::copy(s_fdiag[row].begin(), s_fdiag[row].end(), colidx + rowptr[row]);
+  }
+
   *_d_nnz = d_nnz;
   *_o_nnz = o_nnz;
   *_d_nz = d_nz;
   *_o_nz = o_nz;
+  *_rowptr = rowptr;
+  *_colidx = colidx;
 }
