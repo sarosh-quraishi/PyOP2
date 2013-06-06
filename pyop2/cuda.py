@@ -199,7 +199,7 @@ class Mat(DeviceDataMixin, op2.Mat):
             # iterset, there are sum(iterset.size) * nentries total
             # entries in the LMA data
             for rmap, cmap in self.sparsity.maps:
-                entry_size += rmap.iterset.size
+                entry_size += rmap.iterset.exec_size
             # each entry in the block is size dims[0] x dims[1]
             entry_size *= np.asscalar(np.prod(self.dims))
             nentries *= entry_size
@@ -717,7 +717,7 @@ class ParLoop(op2.ParLoop):
         if self._has_soa:
             op2stride = Const(1, self._it_space.size, name='op2stride',
                               dtype='int32')
-        arglist = [np.int32(self._it_space.size)]
+        arglist = [np.int32(self._it_space.exec_size)]
         config = self.launch_configuration()
         fun = JITModule(self.kernel, self.it_space.extents, *self.args, parloop=self, config=config)
 
