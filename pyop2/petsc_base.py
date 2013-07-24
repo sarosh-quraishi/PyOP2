@@ -46,7 +46,8 @@ import base
 from base import *
 from backends import _make_object
 from logger import debug, warning
-from caching import CopyOnWrite
+from versioning import CopyOnWrite
+from logger import debug
 import mpi
 from mpi import collective
 
