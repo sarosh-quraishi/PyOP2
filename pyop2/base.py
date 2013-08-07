@@ -1779,6 +1779,12 @@ class Dat(SetAssociated, _EmptyDataMixin, CopyOnWrite):
                              "k")
         par_loop(k, self.dataset.set, self(READ), other(READ), ret(WRITE))
         return ret
+        # Introduced by caching code. Need to understand what this does.
+        #     return type(self)(self.dataset,
+        #                op(self._data, as_type(other, self.dtype)), self.dtype)
+        # self._check_shape(other)
+        # return type(self)(self.dataset,
+        #            op(self._data, as_type(other.data, self.dtype)), self.dtype)
 
     @modifies
     def _iop(self, other, op):
