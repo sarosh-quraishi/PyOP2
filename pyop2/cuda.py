@@ -404,7 +404,7 @@ class Global(DeviceDataMixin, op2.Global):
 
         np_op, fn = {op2.MIN: (np.min, min),
                      op2.MAX: (np.max, max),
-                     op2.INC: (np.sum, lambda x,y: x + y)}[op]
+                     op2.INC: (np.sum, lambda x, y: x + y)}[op]
 
         tmp = np_op(tmp, axis=0)
         for i in range(self.cdim):

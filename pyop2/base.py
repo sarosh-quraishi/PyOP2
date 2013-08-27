@@ -63,6 +63,9 @@ class LazyComputation(object):
         _trace.append(self)
         return self
 
+    def push_back(self):
+        _trace.push_back(self)
+
     def _run(self):
         assert False, "Not implemented"
 
@@ -71,6 +74,7 @@ class LazyPass(LazyComputation):
 
     def _run(self):
         pass
+
 
 class LazyMethodCall(LazyComputation):
 
@@ -89,11 +93,13 @@ class LazyMethodCall(LazyComputation):
     def __str__(self):
         return "LazyMethodCall(%r(%r))" % (str(self._method), ", ".join([str(a) for a in self._args]))
 
+
 class LazyFusedComputation(LazyComputation):
 
     def __init__(self, *computations):
-        LazyComputation.__init__(self, set.union(*[c.reads for c in computations]),
-                                       set.union(*[c.writes for c in computations]))
+        LazyComputation.__init__(self,
+                                 set.union(*[c.reads for c in computations]),
+                                 set.union(*[c.writes for c in computations]))
         self._computations = computations
 
     def _run(self):
@@ -110,7 +116,7 @@ class Dependency(object):
         self._dat = dat
 
     def __eq__(self, other):
-        return type(self) == type(other) and self._dat is other._dat 
+        return type(self) == type(other) and self._dat is other._dat
 
     def __hash__(self):
         return self._HASH ^ hash(self._dat)
@@ -118,17 +124,22 @@ class Dependency(object):
     def __str__(self):
         return "%s(%s)" % (self.__class__.__name__, self._dat._name)
 
+
 class CORE(Dependency):
     _HASH = 0b1001
+
 
 class OWNED(Dependency):
     _HASH = 0b0110
 
+
 class HALOEXEC(Dependency):
     _HASH = 0b1100
 
+
 class HALOIMPORT(Dependency):
     _HASH = 0b0011
+
 
 class NET(Dependency):
     _HASH = 0b1111
@@ -150,6 +161,7 @@ class NET(Dependency):
 def ALL(dat):
     return [CORE(dat), OWNED(dat), HALOEXEC(dat), HALOIMPORT(dat)]
 
+
 class ExecutionTrace(object):
 
     """Container maintaining delayed computation until they are executed."""
@@ -167,6 +179,23 @@ class ExecutionTrace(object):
             computation._run()
         else:
             self._trace.append(computation)
+
+    def push_back(self, computation):
+        if not configuration['lazy_evaluation']:
+            assert not self._trace
+            computation._run()
+            return
+
+        def _depends_on(c1, c2):
+            return c1.reads & c2.writes or c1.writes & c2.reads or c1.writes & c2.writes
+        # TODO: ^^ factorise with the one in "evaluate"
+
+        for index, comp in zip(range(len(self._trace), 0, -1), reversed(self._trace)):
+            if _depends_on(computation, comp):
+                self._trace.insert(index, computation)
+                break
+        else:
+            self._trace.insert(0, computation)
 
     def in_queue(self, computation):
         return computation in self._trace
@@ -3017,12 +3046,13 @@ class ParLoop(object):
         self._spawn_assemble()
 
     CORE, OWNED, HALOEXEC = range(3)
+
     def _spawn_compute(self, section):
         part = getattr(self.it_space.iterset,
                        ["core_part", "owned_part", "exec_part"][section])
         direct = [CORE, OWNED, HALOEXEC][section]
         neighboor = [[OWNED], [CORE, HALOEXEC], [OWNED, HALOIMPORT]][section]
-        
+
         reads, writes = ([], [])
         for arg in self.args:
             if arg._is_global:
@@ -3045,7 +3075,7 @@ class ParLoop(object):
                         writes.extend([n(arg.data) for n in neighboor])
 
         if part.size > 0:
-            LazyMethodCall(set(reads) | Const._defs, 
+            LazyMethodCall(set(reads) | Const._defs,
                            set(writes),
                            self.compute,
                            part).enqueue()
@@ -3081,7 +3111,7 @@ class ParLoop(object):
             if arg._is_dat and arg.access in [READ, RW]:
                 LazyMethodCall(set([CORE(arg.data), OWNED(arg.data)]),
                                set([NET(arg.data, self)]),
-                               arg.halo_exchange_begin).enqueue()
+                               arg.halo_exchange_begin).push_back()
 
     def _spawn_halo_exchange_recvs(self):
         """Finish halo exchanges (wait on irecvs)"""
@@ -3091,7 +3121,7 @@ class ParLoop(object):
             if arg._is_dat and arg.access in [READ, RW]:
                 LazyMethodCall(set([NET(arg.data, self)]),
                                set([HALOEXEC(arg.data), HALOIMPORT(arg.data)]),
-                               arg.halo_exchange_end).enqueue()
+                               arg.halo_exchange_end).push_back()
 
     def _spawn_reduction_begin(self):
         """Start reductions"""
