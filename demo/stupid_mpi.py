@@ -54,7 +54,7 @@ def main(opt):
 
     elements, nodes, elem_node, coords = load(f)
     f.close()
-    coords = op2.Dat(nodes ** 2, coords.data, np.float64, "coords")
+    coords = op2.Dat(nodes ** 2, coords._data, np.float64, "coords")
     varea = op2.Dat(nodes, np.zeros((nodes.total_size, 1), valuetype), valuetype, "varea")
 
     mesh_center = op2.Kernel("""\
