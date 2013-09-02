@@ -155,6 +155,10 @@ collect_area(double* varea, double* area)
 
         expected_area *= s[0] * s[1]
 
+        # ensure everything is computed even if no options
+        # are passed to the demo
+        op2.base._trace.evaluate(set([center1, center2, area]), set())
+
         if opt['print_output']:
             print "Rank: %d: [%f, %f] [%f, %f] |%f (%f)|" % \
                 (op2.MPI.comm.rank,
