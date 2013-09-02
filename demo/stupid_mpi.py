@@ -56,6 +56,7 @@ def main(opt):
     f.close()
     coords = op2.Dat(nodes ** 2, coords._data, np.float64, "coords")
     varea = op2.Dat(nodes, np.zeros((nodes.total_size, 1), valuetype), valuetype, "varea")
+    earea = op2.Dat(elements, np.zeros((elements.total_size, 1), valuetype), valuetype, "earea")
 
     mesh_center = op2.Kernel("""\
 void
@@ -83,16 +84,23 @@ elem_center(double* center, double* vcoords[3], int* count)
   *count += 1;
 }""", "elem_center")
 
-    dispatch_area = op2.Kernel("""\
+    elem_area = op2.Kernel("""\
 void
-dispatch_area(double* vcoords[3], double* area[3])
+elem_area(double* vcoords[3], double* area)
 {
   double a = 0;
   a += vcoords[0][0] * ( vcoords[1][1] - vcoords[2][1] );
   a += vcoords[1][0] * ( vcoords[2][1] - vcoords[0][1] );
   a += vcoords[2][0] * ( vcoords[0][1] - vcoords[1][1] );
-  a = fabs(a) / 6.0;
+  a = fabs(a) / 2.0;
+  *area = a;
+}""", "elem_area")
 
+    dispatch_area = op2.Kernel("""\
+void
+dispatch_area(double* earea, double* area[3])
+{
+  double a = *earea / 3.0;
   *area[0] += a;
   *area[1] += a;
   *area[2] += a;
@@ -113,6 +121,8 @@ collect_area(double* varea, double* area)
         elem_count = op2.Global(1, [0], np.int32, name='elem_count')
         scale = op2.Global(2, s, valuetype, name='scale')
         area = op2.Global(1, [0.0], valuetype, name='area')
+        varea.zero()
+        earea.zero()
 
         op2.par_loop(mesh_center, nodes,
                      coords(op2.READ),
@@ -131,9 +141,12 @@ collect_area(double* varea, double* area)
                      center1(op2.READ),
                      scale(op2.READ))
 
-        varea.zero()
-        op2.par_loop(dispatch_area, elements,
+        op2.par_loop(elem_area, elements,
                      coords(op2.READ, elem_node),
+                     earea(op2.WRITE))
+
+        op2.par_loop(dispatch_area, elements,
+                     earea(op2.READ),
                      varea(op2.INC, elem_node))
 
         op2.par_loop(collect_area, nodes,
