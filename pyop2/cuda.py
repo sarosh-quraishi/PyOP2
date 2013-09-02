@@ -850,10 +850,15 @@ class ParLoop(op2.ParLoop):
                     arg.data.state = DeviceDataMixin.DEVICE
         self.maybe_set_dat_dirty()
 
-    def assemble(self):
+    def _spawn_assemble(self):
         for arg in self.args:
             if arg._is_mat:
-                arg.data._assemble(rowmap=arg.map[0], colmap=arg.map[1])
+                base.LazyMethodCall(set([arg.data]),
+                                    set([arg.data]),
+                                    arg.data._assemble,
+                                    rowmap=arg.map[0],
+                                    colmap=arg.map[1]).enqueue()
+
 
 _device = None
 _context = None
