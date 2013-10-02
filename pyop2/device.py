@@ -276,7 +276,7 @@ class Global(DeviceDataMixin, base.Global):
 
 class Map(base.Map):
 
-    def __init__(self, iterset, dataset, arity, values=None, name=None):
+    def __init__(self, iterset, dataset, arity, values=None, name=None, offset=None):
         # The base.Map base class allows not passing values. We do not allow
         # that on the device, but want to keep the API consistent. So if the
         # user doesn't pass values, we fail with MapValueError rather than
@@ -284,7 +284,7 @@ class Map(base.Map):
         # additional parameters
         if values is None:
             raise MapValueError("Map values must be populated.")
-        base.Map.__init__(self, iterset, dataset, arity, values, name)
+        base.Map.__init__(self, iterset, dataset, arity, values, name, offset)
 
     def _to_device(self):
         """Upload mapping values from host to device."""
