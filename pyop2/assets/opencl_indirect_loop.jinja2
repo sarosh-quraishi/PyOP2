@@ -46,6 +46,13 @@
 {%- endif -%}
 {%- endmacro -%}
 
+{%- macro add_offsets(arg) -%}
+// add offsets to current element data
+{%- for i in range(arg.map.arity) %}
+{{ arg._vec_name }}[{{ i }}] += {{ arg.map.offset[i] }} * {{ arg.data.cdim }};
+{%- endfor -%}
+{%- endmacro -%}
+
 {%- macro staged_arg_local_variable_zeroing(arg) -%}
 for (i_2 = 0; i_2 < {{ arg.data.cdim }}; ++i_2) {
     {%- if (arg._is_vec_map or arg._uses_itspace) -%}
@@ -130,6 +137,12 @@ void {{ parloop._stub_name }}(
   int set_size,
   int set_offset,
   __global int* p_ind_map,
+  {#-
+  {%- if(parloop._is_layered) %}
+  __global int* p_map_offs,
+  __global int* p_map_offs_sizes,
+  {%- endif %}
+  -#}
   __global short *p_loc_map,
   __global int* p_ind_sizes,
   __global int* p_ind_offsets,
@@ -149,6 +162,7 @@ void {{ parloop._stub_name }}(
   int block_id;
 
   int i_1;
+  int i_e;
 
 {%- if(parloop._requires_coloring) %}
   __local int colors_count;
@@ -196,6 +210,9 @@ void {{ parloop._stub_name }}(
   // shared indirection mappings
 {%- for arg in parloop._unique_indirect_dat_args %}
   __global int* __local {{ arg._map_name }};
+  {#-{%- if(parloop._is_layered) %}
+  __global int* __local {{ arg._map_name }}_off;
+  {%- endif %}#}
   __local int {{ arg._size_name }};
   __local {{ arg.data._cl_type }}* __local {{ arg._shared_name }};
 {%- endfor %}
@@ -213,6 +230,9 @@ void {{ parloop._stub_name }}(
 {% for arg in parloop._all_inc_itspace_dat_args %}
   {{ arg.data._cl_type }}* {{ arg._vec_name }}[{{ arg.map.arity }}];
 {%- endfor %}
+{#{% for arg in parloop._all_non_inc_itspace_dat_args %}
+  __local int {{ arg._vec_name }}_off[{{ arg.map.arity }}];
+{%- endfor %}#}
 
   if (get_local_id(0) == 0) {
     block_id = p_blk_map[get_group_id(0) + block_offset];
@@ -226,6 +246,9 @@ void {{ parloop._stub_name }}(
     {% for arg in parloop._unique_indirect_dat_args -%}
     {{ arg._size_name }} = p_ind_sizes[{{loop.index0}} + block_id * {{ loop.length }}];
     {{ arg._map_name }} = &p_ind_map[{{arg._which_indirect}} * set_size] + p_ind_offsets[{{loop.index0}} + block_id * {{loop.length}}];
+    {#{%- if(parloop._is_layered) %}
+    {{ arg._map_name }}_off = &p_map_offs[p_map_offs_sizes[{{loop.index0}}]];
+    {% endif %}#}
 {%- endfor %}
 
     nbytes = 0;
@@ -386,14 +409,24 @@ for (int i{{ loop.index0 }}=0; i{{ loop.index0 }}<{{ dim }}; ++i{{ loop.index0 }
 {% if(parloop._has_itspace) %}
 {{ matrix_kernel_call() }}
 {% else %}
-{{ parloop._kernel.name }}(
-  {% filter trim|replace("\n", ",\n") -%}
-  {%- for arg in parloop.args -%}
-  {{ kernel_call_arg(arg) }}
-  {% endfor -%}
-  {{ kernel_call_const_args() }}
-  {%- endfilter %}
-);
+  {% if(parloop._is_layered) -%}
+    // iterate over the column elements
+    for(i_e = 0; i_e < {{ parloop.it_space.layers - 1}}; i_e++){
+  {% endif %}
+    {{ parloop._kernel.name }}(
+      {% filter trim|replace("\n", ",\n") -%}
+      {%- for arg in parloop.args -%}
+      {{ kernel_call_arg(arg) }}
+      {% endfor -%}
+      {{ kernel_call_const_args() }}
+      {%- endfilter %}
+    );
+  {% if(parloop._is_layered) %}
+    {% for arg in parloop._unique_dat_args if(arg._is_vec_map or arg._uses_itspace) %}
+      {{ add_offsets(arg) }}
+    {% endfor %}
+  }
+  {%- endif %}
 {% endif %}
 {%- endmacro -%}
 

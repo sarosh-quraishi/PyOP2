@@ -270,7 +270,7 @@ elements.partition_size = partition_size
 tloop = 0
 t0loop = time.clock()
 t0loop2 = time.time()
-for i in range(0, 100):
+for i in range(0, 1):
     op2.par_loop(mass, elements,
                  g(op2.INC),
                  coords(op2.READ, elem_dofs),

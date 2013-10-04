@@ -90,10 +90,12 @@ class Kernel(device.Kernel):
 
             for cst in self._constants:
                 if cst._is_scalar:
-                    t = c_ast.TypeDecl(cst._name, [], c_ast.IdentifierType([cst._cl_type]))
+                    t = c_ast.TypeDecl(
+                        cst._name, [], c_ast.IdentifierType([cst._cl_type]))
                 else:
-                    t = c_ast.PtrDecl([], c_ast.TypeDecl(cst._name, ["__constant"],
-                                      c_ast.IdentifierType([cst._cl_type])))
+                    t = c_ast.PtrDecl(
+                        [], c_ast.TypeDecl(cst._name, ["__constant"],
+                                           c_ast.IdentifierType([cst._cl_type])))
                 decl = c_ast.Decl(cst._name, [], [], [], t, None, 0)
                 node.params.append(decl)
 
@@ -310,7 +312,8 @@ class Global(device.Global, DeviceDataMixin):
         return self._device_data
 
     def _allocate_reduction_array(self, nelems):
-        self._d_reduc_array = array.zeros(_queue, nelems * self.cdim, dtype=self.dtype)
+        self._d_reduc_array = array.zeros(
+            _queue, nelems * self.cdim, dtype=self.dtype)
 
     @property
     def data(self):
@@ -413,55 +416,77 @@ class Plan(plan.Plan):
     @property
     def ind_map(self):
         if not hasattr(self, '_ind_map_array'):
-            self._ind_map_array = array.to_device(_queue, super(Plan, self).ind_map)
+            self._ind_map_array = array.to_device(
+                _queue, super(Plan, self).ind_map)
         return self._ind_map_array
+
+    # In case loop unrolling fails uncomment this
+    #def map_offs(self, map_offs):
+    #    if not hasattr(self, '_map_offs'):
+    #        self._map_offs = array.to_device(
+    #            _queue, map_offs)
+    #    return self._map_offs
+
+    #def map_offs_sizes(self, map_offs_sizes):
+    #    if not hasattr(self, '_map_offs_sizes'):
+    #        self._map_offs_sizes = array.to_device(
+    #            _queue, map_offs_sizes)
+    #    return self._map_offs_sizes
 
     @property
     def ind_sizes(self):
         if not hasattr(self, '_ind_sizes_array'):
-            self._ind_sizes_array = array.to_device(_queue, super(Plan, self).ind_sizes)
+            self._ind_sizes_array = array.to_device(
+                _queue, super(Plan, self).ind_sizes)
         return self._ind_sizes_array
 
     @property
     def ind_offs(self):
         if not hasattr(self, '_ind_offs_array'):
-            self._ind_offs_array = array.to_device(_queue, super(Plan, self).ind_offs)
+            self._ind_offs_array = array.to_device(
+                _queue, super(Plan, self).ind_offs)
         return self._ind_offs_array
 
     @property
     def loc_map(self):
         if not hasattr(self, '_loc_map_array'):
-            self._loc_map_array = array.to_device(_queue, super(Plan, self).loc_map)
+            self._loc_map_array = array.to_device(
+                _queue, super(Plan, self).loc_map)
         return self._loc_map_array
 
     @property
     def blkmap(self):
         if not hasattr(self, '_blkmap_array'):
-            self._blkmap_array = array.to_device(_queue, super(Plan, self).blkmap)
+            self._blkmap_array = array.to_device(
+                _queue, super(Plan, self).blkmap)
         return self._blkmap_array
 
     @property
     def offset(self):
         if not hasattr(self, '_offset_array'):
-            self._offset_array = array.to_device(_queue, super(Plan, self).offset)
+            self._offset_array = array.to_device(
+                _queue, super(Plan, self).offset)
         return self._offset_array
 
     @property
     def nelems(self):
         if not hasattr(self, '_nelems_array'):
-            self._nelems_array = array.to_device(_queue, super(Plan, self).nelems)
+            self._nelems_array = array.to_device(
+                _queue, super(Plan, self).nelems)
         return self._nelems_array
 
     @property
     def nthrcol(self):
         if not hasattr(self, '_nthrcol_array'):
-            self._nthrcol_array = array.to_device(_queue, super(Plan, self).nthrcol)
+            self._nthrcol_array = array.to_device(
+                _queue, super(Plan, self).nthrcol)
         return self._nthrcol_array
 
     @property
     def thrcol(self):
         if not hasattr(self, '_thrcol_array'):
-            self._thrcol_array = array.to_device(_queue, super(Plan, self).thrcol)
+            self._thrcol_array = array.to_device(
+                _queue, super(Plan, self).thrcol)
         return self._thrcol_array
 
 
@@ -523,6 +548,7 @@ class JITModule(base.JITModule):
 
         # do codegen
         user_kernel = instrument_user_kernel()
+
         template = _jinja2_direct_loop if self._parloop._is_direct \
             else _jinja2_indirect_loop
 
@@ -532,6 +558,10 @@ class JITModule(base.JITModule):
                                'codegen': {'amd': _AMD_fixes},
                                'op2const': Const._definitions()
                                }).encode("ascii")
+        f = open('/homes/gb308/dump.cpp', 'w')
+        f.write(src)
+        from IPython import embed
+        embed()
         self.dump_gen_code(src)
         # disabled -Werror, because some SDK wine about ffc generated code
         prg = cl.Program(_ctx, src).build(options="-Werror")
@@ -540,8 +570,9 @@ class JITModule(base.JITModule):
 
     def dump_gen_code(self, src):
         if cfg['dump-gencode']:
-            path = cfg['dump-gencode-path'] % {"kernel": self._parloop.kernel.name,
-                                               "time": time.strftime('%Y-%m-%d@%H:%M:%S')}
+            path = cfg[
+                'dump-gencode-path'] % {"kernel": self._parloop.kernel.name,
+                                        "time": time.strftime('%Y-%m-%d@%H:%M:%S')}
 
             if not os.path.exists(path):
                 with open(path, "w") as f:
@@ -579,7 +610,7 @@ class ParLoop(device.ParLoop):
     def _i_partition_size(self):
         # TODO FIX: something weird here
         # available_local_memory
-        warning('temporary fix to available local memory computation (-512)')
+        # warning('temporary fix to available local memory computation (-512)')
         available_local_memory = _max_local_memory - 512
         # 16bytes local mem used for global / local indices and sizes
         available_local_memory -= 16
@@ -587,16 +618,20 @@ class ParLoop(device.ParLoop):
         available_local_memory -= (_address_bits / 8) * (len(
             self._unique_dat_args) + len(self._all_global_non_reduction_args))
         # (4/8)ptr size per dat/map pair passed as argument (ind_map)
-        available_local_memory -= (_address_bits / 8) * len(self._unique_indirect_dat_args)
+        available_local_memory -= (_address_bits / 8) * len(
+            self._unique_indirect_dat_args)
         # (4/8)ptr size per global reduction temp array
-        available_local_memory -= (_address_bits / 8) * len(self._all_global_reduction_args)
+        available_local_memory -= (_address_bits / 8) * len(
+            self._all_global_reduction_args)
         # (4/8)ptr size per indirect arg (loc_map)
-        available_local_memory -= (_address_bits / 8) * len(self._all_indirect_args)
+        available_local_memory -= (
+            _address_bits / 8) * len(self._all_indirect_args)
         # (4/8)ptr size * 7: for plan objects
         available_local_memory -= (_address_bits / 8) * 7
         # 1 uint value for block offset
         available_local_memory -= 4
-        # 7: 7bytes potentialy lost for aligning the shared memory buffer to 'long'
+        # 7: 7bytes potentialy lost for aligning the shared memory buffer to
+        # 'long'
         available_local_memory -= 7
         # 12: shared_memory_offset, active_thread_count,
         #     active_thread_count_ceiling variables (could be 8 or 12 depending)
@@ -609,8 +644,15 @@ class ParLoop(device.ParLoop):
         # inside shared memory padding
         available_local_memory -= 2 * (len(self._unique_indirect_dat_args) - 1)
 
-        max_bytes = sum(map(lambda a: a.data._bytes_per_elem, self._all_indirect_args))
-        return available_local_memory / (2 * _warpsize * max_bytes) * (2 * _warpsize)
+        max_bytes = sum(
+            map(lambda a: a.data._bytes_per_elem, self._all_indirect_args))
+
+        max_bytes *= self.it_space.layers
+
+        return_val = available_local_memory / \
+            (2 * _warpsize * max_bytes) * (2 * _warpsize)
+
+        return return_val
 
     def launch_configuration(self):
         if self._is_direct:
@@ -625,7 +667,8 @@ class ParLoop(device.ParLoop):
                 # passed to the kernel
                 # 7: 7bytes potentialy lost for aligning the shared memory
                 # buffer to 'long'
-                warning('temporary fix to available local memory computation (-512)')
+                # warning('temporary fix to available local memory computation
+                # (-512)')
                 available_local_memory = _max_local_memory - 512
                 available_local_memory -= 16
                 available_local_memory -= (len(self._unique_dat_args) +
@@ -653,19 +696,42 @@ class ParLoop(device.ParLoop):
         conf = self.launch_configuration()
 
         if self._is_indirect:
-            _plan = Plan(part,
-                         *self._unwound_args,
-                         partition_size=conf['partition_size'],
-                         matrix_coloring=self._requires_matrix_coloring)
-            conf['local_memory_size'] = _plan.nshared
-            conf['ninds'] = _plan.ninds
-            conf['work_group_size'] = min(_max_work_group_size,
-                                          conf['partition_size'])
-            conf['work_group_count'] = _plan.nblocks
+            if self._is_layered:
+                _plan = Plan(part,
+                             *self._unwound_args,
+                             partition_size=conf['partition_size'],
+                             matrix_coloring=self._requires_matrix_coloring)
+                conf['local_memory_size'] = _plan.nshared * \
+                    self.it_space.layers
+                conf['ninds'] = _plan.ninds
+                conf['work_group_size'] = min(_max_work_group_size,
+                                              conf['partition_size'])
+                conf['work_group_count'] = _plan.nblocks
+
+                # In case loop unrolling fails uncomment this
+                #map_offs = np.concatenate(
+                #    [m.map.offset.tolist() for m in self._all_vec_map_args])
+                #map_offs_sizes = np.cumsum(
+                #    np.concatenate([[0], [len(m.map.offset) for m in self._all_vec_map_args]]))
+            else:
+                _plan = Plan(part,
+                             *self._unwound_args,
+                             partition_size=conf['partition_size'],
+                             matrix_coloring=self._requires_matrix_coloring)
+                conf['local_memory_size'] = _plan.nshared
+                conf['ninds'] = _plan.ninds
+                conf['work_group_size'] = min(_max_work_group_size,
+                                              conf['partition_size'])
+                conf['work_group_count'] = _plan.nblocks
+
+                # In case loop unrolling fails uncomment this
+                #map_offs = None
+                #map_offs_sizes = None
         conf['warpsize'] = _warpsize
         conf['op2stride'] = self._it_space.size
 
-        fun = JITModule(self.kernel, self.it_space, *self.args, parloop=self, conf=conf)
+        fun = JITModule(
+            self.kernel, self.it_space, *self.args, parloop=self, conf=conf)
 
         args = []
         for arg in self._unique_args:
@@ -701,23 +767,28 @@ class ParLoop(device.ParLoop):
             args.append(np.int32(part.offset))
             fun(conf['thread_count'], conf['work_group_size'], *args)
         else:
-            args.append(np.int32(part.size))
-            args.append(np.int32(part.offset))
-            args.append(_plan.ind_map.data)
-            args.append(_plan.loc_map.data)
-            args.append(_plan.ind_sizes.data)
-            args.append(_plan.ind_offs.data)
-            args.append(_plan.blkmap.data)
-            args.append(_plan.offset.data)
-            args.append(_plan.nelems.data)
-            args.append(_plan.nthrcol.data)
-            args.append(_plan.thrcol.data)
+            args.append(np.int32(part.size))  # int set_size
+            args.append(np.int32(part.offset))  # int set_offset
+            args.append(_plan.ind_map.data)  # __global int* p_ind_map
+            # In case loop unrolling fails uncomment this
+            #if map_offs is not None:
+            #    args.append(_plan.map_offs(map_offs).data)  # __global int* p_map_offs
+            #    args.append(_plan.map_offs_sizes(map_offs_sizes).data) # __global int* p_maps_offs_sizes
+            args.append(_plan.loc_map.data)  # __global short *p_loc_map
+            args.append(_plan.ind_sizes.data)  # __global int* p_ind_sizes
+            args.append(_plan.ind_offs.data)  # __global int* p_ind_offsets
+            args.append(_plan.blkmap.data)  # __global int* p_blk_map
+            args.append(_plan.offset.data)  # __global int* p_offset
+            args.append(_plan.nelems.data)  # __global int* p_nelems
+            args.append(_plan.nthrcol.data)  # __global int* p_nthrcol
+            args.append(_plan.thrcol.data)  # __global int* p_thrcol
 
             block_offset = 0
-            args.append(0)
+            args.append(0)  # __private int block_offset
             for i in range(_plan.ncolors):
                 blocks_per_grid = int(_plan.ncolblk[i])
-                threads_per_block = min(_max_work_group_size, conf['partition_size'])
+                threads_per_block = min(
+                    _max_work_group_size, conf['partition_size'])
                 thread_count = threads_per_block * blocks_per_grid
 
                 args[-1] = np.int32(block_offset)
@@ -732,7 +803,8 @@ class ParLoop(device.ParLoop):
                 maybe_setflags(arg.data._data, write=False)
 
         for a in self._all_global_reduction_args:
-            a.data._post_kernel_reduction_task(conf['work_group_count'], a.access)
+            a.data._post_kernel_reduction_task(
+                conf['work_group_count'], a.access)
 
 
 @collective
@@ -754,7 +826,8 @@ def _setup():
     global _supports_64b_atomics
 
     _ctx = cl.create_some_context()
-    _queue = cl.CommandQueue(_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
+    _queue = cl.CommandQueue(
+        _ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
     _pref_work_group_count = _queue.device.max_compute_units
     _max_local_memory = _queue.device.local_mem_size
     _address_bits = _queue.device.address_bits
@@ -774,7 +847,8 @@ def _setup():
         # assumes nvidia, will probably fail with AMD gpus
         _warpsize = 32
 
-    _AMD_fixes = _queue.device.platform.vendor in ['Advanced Micro Devices, Inc.']
+    _AMD_fixes = _queue.device.platform.vendor in [
+        'Advanced Micro Devices, Inc.']
     _reduction_task_cache = dict()
 
 _supports_64b_atomics = False
@@ -793,5 +867,7 @@ _reduction_task_cache = None
 _jinja2_env = Environment(loader=PackageLoader("pyop2", "assets"))
 _jinja2_direct_loop = _jinja2_env.get_template("opencl_direct_loop.jinja2")
 _jinja2_indirect_loop = _jinja2_env.get_template("opencl_indirect_loop.jinja2")
-_jinja2_direct_loop_extr = _jinja2_env.get_template("opencl_direct_loop_extr.jinja2")
-_jinja2_indirect_loop_extr = _jinja2_env.get_template("opencl_indirect_loop_extr.jinja2")
+_jinja2_direct_loop_extr = _jinja2_env.get_template(
+    "opencl_direct_loop_extr.jinja2")
+_jinja2_indirect_loop_extr = _jinja2_env.get_template(
+    "opencl_indirect_loop_extr.jinja2")
