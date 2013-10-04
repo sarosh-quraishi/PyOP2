@@ -558,10 +558,201 @@ class JITModule(base.JITModule):
                                'codegen': {'amd': _AMD_fixes},
                                'op2const': Const._definitions()
                                }).encode("ascii")
-        f = open('/homes/gb308/dump.cpp', 'w')
-        f.write(src)
-        from IPython import embed
-        embed()
+        #f = open('/homes/gb308/dump.cpp', 'w')
+        #f.write(src)
+        #from IPython import embed
+        #embed()
+        print "THIS IS JUST BEFORE SRC"
+        src="""
+        /* Launch configuration:
+ *   work group size     : 26
+ *   partition size      : 26
+ *   local memory size   : 29744
+ *   local memory offset : 
+ *   warpsize            : 1
+ */
+
+#if defined(cl_khr_fp64)
+#if defined(cl_amd_fp64)
+#pragma OPENCL EXTENSION cl_amd_fp64 : enable
+#else
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#endif
+#elif defined(cl_amd_fp64)
+#pragma OPENCL EXTENSION cl_amd_fp64 : enable
+#endif
+
+#define ROUND_UP(bytes) (((bytes) + 15) & ~15)
+#define OP_WARPSIZE 1
+#define OP2_STRIDE(arr, idx) ((arr)[43110 * (idx)])
+
+__kernel
+void arg0_reduction_kernel (
+  __global double *reduction_result,
+  __private double input_value,
+  __local double *reduction_tmp_array
+) {
+  barrier(CLK_LOCAL_MEM_FENCE);
+  int lid = get_local_id(0);
+  reduction_tmp_array[lid] = input_value;
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  for(int offset = 1; offset < (int)get_local_size(0); offset <<= 1) {
+    int mask = (offset << 1) - 1;
+    if(((lid & mask) == 0) && (lid + offset < (int)get_local_size(0))) {
+      reduction_tmp_array[lid] += reduction_tmp_array[lid + offset];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  if (lid == 0)
+    *reduction_result = reduction_tmp_array[0];
+}
+
+
+void comp_vol(__private double A[1], __local double *x[], __local double *y[]);
+void comp_vol(__private double A[1], __local double *x[], __local double *y[])
+{
+  double area = ((x[0][0] * (x[2][1] - x[4][1])) + (x[2][0] * (x[4][1] - x[0][1]))) + (x[4][0] * (x[0][1] - x[2][1]));
+  if (area < 0)
+    area = area * (-1.0);
+
+  A[0] += ((0.5 * area) * 0.1) * y[0][0];
+}
+
+
+__kernel
+__attribute__((reqd_work_group_size(26, 1, 1)))
+void __comp_vol_stub(
+  __global double* ind_arg1,
+  __global double* ind_arg2,
+  __global double* arg0,
+  int set_size,
+  int set_offset,
+  __global int* p_ind_map,__global short *p_loc_map,
+  __global int* p_ind_sizes,
+  __global int* p_ind_offsets,
+  __global int* p_blk_map,
+  __global int* p_offset,
+  __global int* p_nelems,
+  __global int* p_nthrcol,
+  __global int* p_thrcol,
+  __private int block_offset
+) {
+  __local char shared [29744] __attribute__((aligned(sizeof(long))));
+  __local int offset_b;
+  __local int offset_b_abs;
+  __local int active_threads_count;
+
+  int nbytes;
+  int block_id;
+
+  int i_1;
+  int i_e;
+  // reduction args
+  // global reduction local declarations
+
+  double arg0_reduction_local[10];
+
+  // shared indirection mappings
+  __global int* __local ind_arg1_map;
+  __local int ind_arg1_size;
+  __local double* __local ind_arg1_shared;
+  __global int* __local ind_arg2_map;
+  __local int ind_arg2_size;
+  __local double* __local ind_arg2_shared;
+
+  __local double* ind_arg1_vec[6];
+  __local double* ind_arg2_vec[1];
+
+  if (get_local_id(0) == 0) {
+    block_id = p_blk_map[get_group_id(0) + block_offset];
+    active_threads_count = p_nelems[block_id];
+    offset_b_abs = p_offset[block_id];
+    offset_b = offset_b_abs - set_offset;
+    ind_arg1_size = p_ind_sizes[0 + block_id * 2];
+    ind_arg1_map = &p_ind_map[0 * set_size] + p_ind_offsets[0 + block_id * 2];
+    ind_arg2_size = p_ind_sizes[1 + block_id * 2];
+    ind_arg2_map = &p_ind_map[6 * set_size] + p_ind_offsets[1 + block_id * 2];
+    
+
+    nbytes = 0;
+    //printf("%d \\n", nbytes);
+    ind_arg1_shared = (__local double*) (&shared[nbytes]);
+    nbytes += ROUND_UP(ind_arg1_size * 2 * sizeof(double) * 11);
+    //printf("%d %d \\n", nbytes, ind_arg1_size);
+    ind_arg2_shared = (__local double*) (&shared[nbytes]);
+    nbytes += ROUND_UP(ind_arg2_size * 1 * sizeof(double) * 11);
+    //printf("%d %d \\n", nbytes, ind_arg2_size);
+    if (nbytes > 29744) printf(" THIS IS IT!! ");
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+// staging in of indirect dats
+  
+  for (i_1 = get_local_id(0); i_1 < ind_arg1_size * 2 * 11; i_1 += get_local_size(0)) {
+  ind_arg1_shared[i_1] = ind_arg1[i_1 % 2 + ind_arg1_map[i_1 / 2] * 2];
+}
+  
+  for (i_1 = get_local_id(0); i_1 < ind_arg2_size * 1 * 11; i_1 += get_local_size(0)) {
+  ind_arg2_shared[i_1] = ind_arg2[i_1 % 1 + ind_arg2_map[i_1 / 1] * 1];
+}
+  
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  // zeroing private memory for global reduction
+  
+  for (i_1 = 0; i_1 < 1 * 10; ++i_1) {
+  arg0_reduction_local[i_1] = 0.0;
+}
+  
+
+  for (i_1 = get_local_id(0); i_1 < active_threads_count; i_1 += get_local_size(0)) {
+    
+        // populate vec map
+      ind_arg1_vec[0] = &ind_arg1_shared[p_loc_map[i_1 + 0*set_size + offset_b] * 2];
+      ind_arg1_vec[1] = &ind_arg1_shared[p_loc_map[i_1 + 1*set_size + offset_b] * 2];
+      ind_arg1_vec[2] = &ind_arg1_shared[p_loc_map[i_1 + 2*set_size + offset_b] * 2];
+      ind_arg1_vec[3] = &ind_arg1_shared[p_loc_map[i_1 + 3*set_size + offset_b] * 2];
+      ind_arg1_vec[4] = &ind_arg1_shared[p_loc_map[i_1 + 4*set_size + offset_b] * 2];
+      ind_arg1_vec[5] = &ind_arg1_shared[p_loc_map[i_1 + 5*set_size + offset_b] * 2];
+      
+        // populate vec map
+      ind_arg2_vec[0] = &ind_arg2_shared[p_loc_map[i_1 + 6*set_size + offset_b] * 1];
+      
+      
+        // iterate over the column elements
+          for(i_e = 0; i_e < 10; i_e++){
+        
+          comp_vol(
+            arg0_reduction_local,
+            ind_arg1_vec,
+            ind_arg2_vec
+          );
+        
+          
+            // add offsets to current element data
+      ind_arg1_vec[0] += 1 * 2;
+      ind_arg1_vec[1] += 1 * 2;
+      ind_arg1_vec[2] += 1 * 2;
+      ind_arg1_vec[3] += 1 * 2;
+      ind_arg1_vec[4] += 1 * 2;
+      ind_arg1_vec[5] += 1 * 2;
+          
+            // add offsets to current element data
+      ind_arg2_vec[0] += 1 * 1;
+   
+        }
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+  // on device global reductions
+  
+  for (i_1 = 0; i_1 < 10; ++i_1)
+  {
+      arg0_reduction_kernel(&arg0[i_1 + get_group_id(0) * 1], arg0_reduction_local[i_1], (__local double*) shared);
+  }
+}
+        """
         self.dump_gen_code(src)
         # disabled -Werror, because some SDK wine about ffc generated code
         prg = cl.Program(_ctx, src).build(options="-Werror")
@@ -792,7 +983,9 @@ class ParLoop(device.ParLoop):
                 thread_count = threads_per_block * blocks_per_grid
 
                 args[-1] = np.int32(block_offset)
+                print "BEFORE"
                 fun(int(thread_count), int(threads_per_block), *args)
+                print "AFTER"
                 block_offset += blocks_per_grid
 
         # mark !READ data as dirty
