@@ -558,16 +558,16 @@ class JITModule(base.JITModule):
                                'codegen': {'amd': _AMD_fixes},
                                'op2const': Const._definitions()
                                }).encode("ascii")
-        #f = open('/homes/gb308/dump.cpp', 'w')
-        #f.write(src)
+        f = open('/homes/gb308/dump.cpp', 'w')
+        f.write(src)
         #from IPython import embed
         #embed()
-        print "THIS IS JUST BEFORE SRC"
+        #print "THIS IS JUST BEFORE SRC"
         src="""
         /* Launch configuration:
  *   work group size     : 26
  *   partition size      : 26
- *   local memory size   : 29744
+ *   local memory size   : 1584
  *   local memory offset : 
  *   warpsize            : 1
  */
@@ -584,7 +584,7 @@ class JITModule(base.JITModule):
 
 #define ROUND_UP(bytes) (((bytes) + 15) & ~15)
 #define OP_WARPSIZE 1
-#define OP2_STRIDE(arr, idx) ((arr)[43110 * (idx)])
+#define OP2_STRIDE(arr, idx) ((arr)[2 * (idx)])
 
 __kernel
 void arg0_reduction_kernel (
@@ -639,7 +639,7 @@ void __comp_vol_stub(
   __global int* p_thrcol,
   __private int block_offset
 ) {
-  __local char shared [29744] __attribute__((aligned(sizeof(long))));
+  __local char shared [1584] __attribute__((aligned(sizeof(long))));
   __local int offset_b;
   __local int offset_b_abs;
   __local int active_threads_count;
@@ -654,6 +654,8 @@ void __comp_vol_stub(
 
   double arg0_reduction_local[10];
 
+
+
   // shared indirection mappings
   __global int* __local ind_arg1_map;
   __local int ind_arg1_size;
@@ -664,6 +666,10 @@ void __comp_vol_stub(
 
   __local double* ind_arg1_vec[6];
   __local double* ind_arg2_vec[1];
+
+
+ 
+
 
   if (get_local_id(0) == 0) {
     block_id = p_blk_map[get_group_id(0) + block_offset];
@@ -677,39 +683,64 @@ void __comp_vol_stub(
     
 
     nbytes = 0;
-    //printf("%d \\n", nbytes);
+    printf("nbytes = %d \\n",nbytes);
     ind_arg1_shared = (__local double*) (&shared[nbytes]);
-    nbytes += ROUND_UP(ind_arg1_size * 2 * sizeof(double) * 11);
-    //printf("%d %d \\n", nbytes, ind_arg1_size);
+    nbytes += ROUND_UP(ind_arg1_size * 2 * sizeof(double) * 10);
+    printf("nbytes = %d \\n",nbytes);
     ind_arg2_shared = (__local double*) (&shared[nbytes]);
     nbytes += ROUND_UP(ind_arg2_size * 1 * sizeof(double) * 11);
-    //printf("%d %d \\n", nbytes, ind_arg2_size);
-    if (nbytes > 29744) printf(" THIS IS IT!! ");
+    printf("nbytes = %d \\n",nbytes);
+
+    for(int ii = 0; ii < 88; ii++){
+        printf(" %f \\n", ind_arg1[ii]);
+    }
+    printf(" MAP : \\n");
+
+    for(int ii = 0; ii < 6; ii++){
+        printf(" %d \\n", ind_arg1_map[ii]);
+    }
+    printf("\\n");
+    printf ("ind_arg1_size = %d \\n", ind_arg1_size);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
+printf (" 1 \\n");
 
 // staging in of indirect dats
   
-  for (i_1 = get_local_id(0); i_1 < ind_arg1_size * 2 * 11; i_1 += get_local_size(0)) {
-  ind_arg1_shared[i_1] = ind_arg1[i_1 % 2 + ind_arg1_map[i_1 / 2] * 2];
+  for (i_1 = get_local_id(0); i_1 < ind_arg1_size * 2; i_1 += get_local_size(0)) {
+    printf(" i_1 = %d map = %d, map2 = %d \\n", i_1, ind_arg1_map[i_1 / 2], i_1 % 2 + ind_arg1_map[i_1 / 2] * 2);
+    for(int i_2 = 0; i_2 < 10; i_2++){
+        ind_arg1_shared[10*i_1 + i_2] = ind_arg1[ 10* (i_1 % 2 + ind_arg1_map[i_1 / 2] * 2) + i_2];
+    }
 }
+
+printf (" 1.5 \\n");
+
   
   for (i_1 = get_local_id(0); i_1 < ind_arg2_size * 1 * 11; i_1 += get_local_size(0)) {
+
   ind_arg2_shared[i_1] = ind_arg2[i_1 % 1 + ind_arg2_map[i_1 / 1] * 1];
 }
+
+printf (" 2 \\n");
   
   barrier(CLK_LOCAL_MEM_FENCE);
 
   // zeroing private memory for global reduction
   
-  for (i_1 = 0; i_1 < 1 * 10; ++i_1) {
+  for (i_1 = 0; i_1 < 10; ++i_1) {
   arg0_reduction_local[i_1] = 0.0;
 }
   
+printf (" 3 \\n");
 
   for (i_1 = get_local_id(0); i_1 < active_threads_count; i_1 += get_local_size(0)) {
     
         // populate vec map
+        for(int ii=0; ii<6; ii++){
+            printf("%d ", p_loc_map[i_1 + ii*set_size + offset_b]);
+        }
+        printf("\\n");
       ind_arg1_vec[0] = &ind_arg1_shared[p_loc_map[i_1 + 0*set_size + offset_b] * 2];
       ind_arg1_vec[1] = &ind_arg1_shared[p_loc_map[i_1 + 1*set_size + offset_b] * 2];
       ind_arg1_vec[2] = &ind_arg1_shared[p_loc_map[i_1 + 2*set_size + offset_b] * 2];
@@ -741,7 +772,7 @@ void __comp_vol_stub(
           
             // add offsets to current element data
       ind_arg2_vec[0] += 1 * 1;
-   
+          
         }
   }
   barrier(CLK_LOCAL_MEM_FENCE);
@@ -753,6 +784,7 @@ void __comp_vol_stub(
   }
 }
         """
+        
         self.dump_gen_code(src)
         # disabled -Werror, because some SDK wine about ffc generated code
         prg = cl.Program(_ctx, src).build(options="-Werror")
@@ -973,6 +1005,9 @@ class ParLoop(device.ParLoop):
             args.append(_plan.nelems.data)  # __global int* p_nelems
             args.append(_plan.nthrcol.data)  # __global int* p_nthrcol
             args.append(_plan.thrcol.data)  # __global int* p_thrcol
+
+            from IPython import embed
+            embed()
 
             block_offset = 0
             args.append(0)  # __private int block_offset
