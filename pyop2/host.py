@@ -259,6 +259,14 @@ class Arg(base.Arg):
                            'num': self.c_offset(),
                            'dim': self.data.cdim} for j in range(self.map.arity)])
 
+    def c_multiply_offset(self, layer_num):
+        return '\n'.join(["%(name)s[%(j)d] += %(layer)s * _off%(num)s[%(j)d] * %(dim)s;" %
+                          {'name': self.c_vec_name(),
+                           'j': j,
+                           'num': self.c_offset(),
+                           'layer' : str(layer_num - 1),
+                           'dim': self.data.cdim} for j in range(self.map.arity)])
+
     # New globals generation which avoids false sharing.
     def c_intermediate_globals_decl(self, count):
         return "%(type)s %(name)s_l%(count)s[1][%(dim)s]" % \
@@ -350,6 +358,7 @@ class JITModule(base.JITModule):
         self._kernel = kernel
         self._extents = itspace.extents
         self._layers = itspace.layers
+        self._iteration_layer = itspace.iteration_layer
         self._args = args
 
     def __call__(self, *args):
@@ -475,14 +484,29 @@ class JITModule(base.JITModule):
 
         _apply_offset = ""
         if self._layers > 1:
+            if self._iteration_layer is not None:
+                _jump_to_layer = ';\n'.join([arg.c_multiply_offset(self._iteration_layer) 
+                                             for arg in self._args if arg._is_vec_map])
+
+                _apply_offset = ""
+
+                _extr_loop = ""
+
+                _extr_loop_close = ""
+            else:
+                _apply_offset += ';\n'.join([arg.c_add_offset_map() for arg in self._args
+                                             if arg._uses_itspace])
+                _apply_offset += ';\n'.join([arg.c_add_offset() for arg in self._args
+                                             if arg._is_vec_map])
+                _extr_loop = '\n' + extrusion_loop(self._layers - 1)
+
+                _extr_loop_close = '}\n'
+
             _off_args = ''.join([arg.c_offset_init() for arg in self._args
                                  if arg._uses_itspace or arg._is_vec_map])
             _off_inits = ';\n'.join([arg.c_offset_decl() for arg in self._args
                                      if arg._uses_itspace or arg._is_vec_map])
-            _apply_offset += ';\n'.join([arg.c_add_offset_map() for arg in self._args
-                                        if arg._uses_itspace])
-            _apply_offset += ';\n'.join([arg.c_add_offset() for arg in self._args
-                                         if arg._is_vec_map])
+            
             _map_init = ';\n'.join([arg.c_map_init() for arg in self._args
                                     if arg._uses_itspace])
             _map_decl = ''
@@ -495,9 +519,6 @@ class JITModule(base.JITModule):
             _addtos_scalar_field_extruded = ';\n'.join([arg.c_addto_scalar_field("xtr_") for arg in self._args
                                                         if arg._is_mat and arg.data._is_scalar_field])
             _addtos_scalar_field = ""
-
-            _extr_loop = '\n' + extrusion_loop(self._layers - 1)
-            _extr_loop_close = '}\n'
         else:
             _off_args = ""
             _off_inits = ""
@@ -506,6 +527,7 @@ class JITModule(base.JITModule):
             _addtos_scalar_field_extruded = ""
             _map_decl = ""
             _map_init = ""
+            _jump_to_layer = ""
 
         indent = lambda t, i: ('\n' + '  ' * i).join(t.split('\n'))
 
@@ -533,4 +555,5 @@ class JITModule(base.JITModule):
                 'interm_globals_writeback': indent(_intermediate_globals_writeback, 3),
                 'addtos_scalar_field_extruded': indent(_addtos_scalar_field_extruded, 2 + nloops),
                 'map_init': indent(_map_init, 5),
-                'map_decl': indent(_map_decl, 1)}
+                'map_decl': indent(_map_decl, 1),
+                'jump_to_layer': indent(_jump_to_layer, 5)}
