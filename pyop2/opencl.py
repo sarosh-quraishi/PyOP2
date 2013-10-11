@@ -668,9 +668,6 @@ void __comp_vol_stub(
   __local double* ind_arg2_vec[1];
 
 
- 
-
-
   if (get_local_id(0) == 0) {
     block_id = p_blk_map[get_group_id(0) + block_offset];
     active_threads_count = p_nelems[block_id];
@@ -688,36 +685,47 @@ void __comp_vol_stub(
     nbytes += ROUND_UP(ind_arg1_size * 2 * sizeof(double) * 10);
     printf("nbytes = %d \\n",nbytes);
     ind_arg2_shared = (__local double*) (&shared[nbytes]);
-    nbytes += ROUND_UP(ind_arg2_size * 1 * sizeof(double) * 11);
+    nbytes += ROUND_UP(ind_arg2_size * 1 * sizeof(double) * 10);
     printf("nbytes = %d \\n",nbytes);
 
-    for(int ii = 0; ii < 88; ii++){
-        printf(" %f \\n", ind_arg1[ii]);
+    for(int ii = 0; ii < 88; ii+=2){
+        printf(" %f   %f\\n", ind_arg1[ii], ind_arg1[ii+1]);
     }
     printf(" MAP : \\n");
 
-    for(int ii = 0; ii < 6; ii++){
+    for(int ii = 0; ii < 8; ii++){
         printf(" %d \\n", ind_arg1_map[ii]);
     }
     printf("\\n");
-    printf ("ind_arg1_size = %d \\n", ind_arg1_size);
+    printf ("ind_arg1_size = %d ind_arg2_size = %d\\n", ind_arg1_size, ind_arg2_size);
+
+    for(int ii=0; ii<6; ii++){
+            printf("%d ", p_loc_map[1+ ii*set_size + offset_b]);
+    }
+    printf("\\n");
   }
   barrier(CLK_LOCAL_MEM_FENCE);
-printf (" 1 \\n");
+//printf (" 1 \\n");
 
 // staging in of indirect dats
   
-  for (i_1 = get_local_id(0); i_1 < ind_arg1_size * 2; i_1 += get_local_size(0)) {
-    printf(" i_1 = %d map = %d, map2 = %d \\n", i_1, ind_arg1_map[i_1 / 2], i_1 % 2 + ind_arg1_map[i_1 / 2] * 2);
-    for(int i_2 = 0; i_2 < 10; i_2++){
-        ind_arg1_shared[10*i_1 + i_2] = ind_arg1[ 10* (i_1 % 2 + ind_arg1_map[i_1 / 2] * 2) + i_2];
-    }
+for (i_1 = get_local_id(0); i_1 < ind_arg1_size*2*10; i_1 += get_local_size(0)) {
+    printf(" i_1 = %d col = %d, map2 = %d \\n", i_1, ind_arg1_map[i_1 / 2 / 10], i_1 % 2 + ind_arg1_map[i_1 / 2 / 10] * 2);
+    
+    //printf(" ----- in shared at %d  from arg at %d \\n", i_1 % 2 + ind_arg1_map[i_1 / 2 / 10] * 2, (i_1 % 2 + ind_arg1_map[i_1 / 2 / 10] * 2));
+    //for(int i_2 = 0; i_2 < 10; i_2++){
+    //    //printf(" ----- in shared at %d  from arg at %d \\n", i_1 % 2 + ind_arg1_map[i_1 / 2] * 2 + i_2, (i_1 % 2 + ind_arg1_map[i_1 / 2] * 2) + i_2);
+    //    ind_arg1_shared[i_1 % 2 + ind_arg1_map[i_1 / 2] * 2 + i_2] = ind_arg1[(i_1 % 2 + ind_arg1_map[i_1 / 2] * 2) + i_2];
+    //}
+    barrier(CLK_LOCAL_MEM_FENCE);
 }
 
-printf (" 1.5 \\n");
+//printf (" 1.5 \\n");
+//TODO: remove this
+barrier(CLK_LOCAL_MEM_FENCE);
 
   
-  for (i_1 = get_local_id(0); i_1 < ind_arg2_size * 1 * 11; i_1 += get_local_size(0)) {
+for (i_1 = get_local_id(0); i_1 < ind_arg2_size * 1 * 11; i_1 += get_local_size(0)) {
 
   ind_arg2_shared[i_1] = ind_arg2[i_1 % 1 + ind_arg2_map[i_1 / 1] * 1];
 }
@@ -924,6 +932,8 @@ class ParLoop(device.ParLoop):
                              *self._unwound_args,
                              partition_size=conf['partition_size'],
                              matrix_coloring=self._requires_matrix_coloring)
+                from IPython import embed
+                embed()
                 conf['local_memory_size'] = _plan.nshared * \
                     self.it_space.layers
                 conf['ninds'] = _plan.ninds
@@ -1005,9 +1015,6 @@ class ParLoop(device.ParLoop):
             args.append(_plan.nelems.data)  # __global int* p_nelems
             args.append(_plan.nthrcol.data)  # __global int* p_nthrcol
             args.append(_plan.thrcol.data)  # __global int* p_thrcol
-
-            from IPython import embed
-            embed()
 
             block_offset = 0
             args.append(0)  # __private int block_offset
@@ -1095,7 +1102,3 @@ _reduction_task_cache = None
 _jinja2_env = Environment(loader=PackageLoader("pyop2", "assets"))
 _jinja2_direct_loop = _jinja2_env.get_template("opencl_direct_loop.jinja2")
 _jinja2_indirect_loop = _jinja2_env.get_template("opencl_indirect_loop.jinja2")
-_jinja2_direct_loop_extr = _jinja2_env.get_template(
-    "opencl_direct_loop_extr.jinja2")
-_jinja2_indirect_loop_extr = _jinja2_env.get_template(
-    "opencl_indirect_loop_extr.jinja2")
