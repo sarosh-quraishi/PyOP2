@@ -203,6 +203,7 @@ nums[1] = k  # number of edges
 off = np.zeros(map_dofs, dtype=np.int32)
 off_coords = np.zeros(map_dofs_coords, dtype=np.int32)
 off_field = np.zeros(map_dofs_field, dtype=np.int32)
+off_facets = np.zeros(2 * map_dofs_coords, dtype=np.int32)
 # THE OFFSET array
 # for 2D and 3D
 count = 0
@@ -218,6 +219,8 @@ for i in range(0, map_dofs_coords):
     off_coords[i] = 1
 for i in range(0, map_dofs_field):
     off_field[i] = 1
+for i in range(0, 2*map_dofs_coords):
+    off_facets[i] = 1
 
 # assemble the dat
 # compute total number of dofs in the 3D mesh
@@ -266,7 +269,7 @@ elem_elem = op2.Map(elements, wedges_dofsSet, map_dofs_field, ind_field,
 g = op2.Global(1, data=0.0, name='g')
 
 # Set the iteration space to include only the bottom layer of cells
-elements.iteration_layer = 1 
+elements.iteration_layer = 1
 op2.par_loop(bottom_area, elements,
              g(op2.INC),
              coords(op2.READ, elem_dofs))
@@ -283,3 +286,69 @@ op2.par_loop(top_area, elements,
              coords(op2.READ, elem_dofs))
 
 print "Top area", g.data
+
+# Compute over the horizontal facets
+# This is a column test so getting the volume right is important.
+
+g = op2.Global(1, data=0.0, name='g')
+
+# Set the iteration space to include only the bottom layer of cells
+elements.iteration_layer = None
+# TODO: Automate this using a flag to trigger the iteration
+# over this type of facets
+# elements.interior_horizontal = True
+
+# Create a composed map
+map_set = op2.Set(nums[2], "map_set")
+b_map = op2.Dat(map_set ** elem_dofs.arity,
+                     elem_dofs.values.flatten(), np.int32, "b_map")
+
+h_map = op2.Dat(map_set ** (2 * elem_dofs.arity), np.zeros( 12 * nums[2] ), np.int32, "h_map")
+
+compose_int_horiz_map = op2.Kernel("""
+void compose_map(int *x, int *y)
+{
+  y[0] = x[0];
+  y[1] = x[1];
+  y[2] = x[2];
+  y[3] = x[3];
+  y[4] = x[4];
+  y[5] = x[5];
+
+  y[6] = x[0] + 1;
+  y[7] = x[1] + 1;
+  y[8] = x[2] + 1;
+  y[9] = x[3] + 1;
+  y[10] = x[4] + 1;
+  y[11] = x[5] + 1;
+}""", "compose_map")
+
+op2.par_loop(compose_int_horiz_map, map_set,
+             b_map(op2.READ),
+             h_map(op2.INC))
+
+facet_map = op2.Map(elements, coords_dofsSet, (2*elem_dofs.arity), h_map.data, "facet_map", off_facets)
+
+volume_with_facets = op2.Kernel("""
+void comp_vol(double A[1], double *x[])
+{
+  double area_prev = x[0][0]*(x[2][1]-x[4][1]) + x[2][0]*(x[4][1]-x[0][1])
+               + x[4][0]*(x[0][1]-x[2][1]);
+  if (area_prev < 0)
+    area_prev = area_prev * (-1.0);
+  A[0]+=0.5*area_prev * 0.1;
+
+  double area_next = x[6][0]*(x[8][1]-x[10][1]) + x[8][0]*(x[10][1]-x[6][1])
+               + x[10][0]*(x[6][1]-x[8][1]);
+  if (area_next < 0)
+    area_next = area_next * (-1.0);
+  A[0]+=0.5*area_next * 0.1;
+}""", "comp_vol")
+
+elements.horizontal_facets = True
+
+op2.par_loop(volume_with_facets, elements,
+             g(op2.INC),
+             coords(op2.READ, facet_map))
+
+print "Interior Volume ", g.data

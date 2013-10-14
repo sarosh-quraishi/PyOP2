@@ -512,6 +512,7 @@ class Set(object):
         self._layers = layers if layers is not None else 1
         self._partition_size = 1024
         self._iteration_layer = None
+        self._horizontal_facets = False
         if self.halo:
             self.halo.verify(self)
         Set._globalcount += 1
@@ -578,9 +579,20 @@ class Set(object):
     @iteration_layer.setter
     def iteration_layer(self, iteration_layer):
         """Set the iteration layer"""
-        if iteration_layer >= self._layers or iteration_layer <= 0:
-            raise RuntimeError("Invalid number of layers")
+        if iteration_layer is not None:
+            if iteration_layer >= self._layers or iteration_layer <= 0:
+                raise RuntimeError("Invalid number of layers")
         self._iteration_layer = iteration_layer
+
+    @property
+    def horizontal_facets(self):
+        """Default horizontal_facets value"""
+        return self._horizontal_facets
+
+    @horizontal_facets.setter
+    def horizontal_facets(self, value):
+        """Set the horizontal_facets flag"""
+        self._horizontal_facets = value
 
     def __str__(self):
         return "OP2 Set: %s with size %s" % (self._name, self._size)
@@ -892,6 +904,11 @@ class IterationSpace(object):
     def iteration_layer(self):
         """Number of layers in the extruded mesh"""
         return self._iterset.iteration_layer
+
+    @property
+    def horizontal_facets(self):
+        """horizontal_facets facets flag"""
+        return self._iterset.horizontal_facets
 
     @property
     def partition_size(self):

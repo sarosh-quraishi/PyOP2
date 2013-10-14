@@ -359,6 +359,7 @@ class JITModule(base.JITModule):
         self._extents = itspace.extents
         self._layers = itspace.layers
         self._iteration_layer = itspace.iteration_layer
+        self._horizontal_facets = itspace.horizontal_facets
         self._args = args
 
     def __call__(self, *args):
@@ -389,6 +390,7 @@ class JITModule(base.JITModule):
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
+        print code_to_compile
         self._fun = inline_with_numpy(
             code_to_compile, additional_declarations=kernel_code,
             additional_definitions=_const_decs + kernel_code,
@@ -498,9 +500,15 @@ class JITModule(base.JITModule):
                                              if arg._uses_itspace])
                 _apply_offset += ';\n'.join([arg.c_add_offset() for arg in self._args
                                              if arg._is_vec_map])
-                _extr_loop = '\n' + extrusion_loop(self._layers - 1)
+
+                if self._horizontal_facets:
+                    _extr_loop = '\n' + extrusion_loop(self._layers - 2)
+                else:
+                    _extr_loop = '\n' + extrusion_loop(self._layers - 1)
 
                 _extr_loop_close = '}\n'
+
+                _jump_to_layer = ""
 
             _off_args = ''.join([arg.c_offset_init() for arg in self._args
                                  if arg._uses_itspace or arg._is_vec_map])
