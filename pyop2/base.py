@@ -513,6 +513,7 @@ class Set(object):
         self._partition_size = 1024
         self._iteration_layer = None
         self._horizontal_facets = False
+        self._horizontal_interior_facets = False
         if self.halo:
             self.halo.verify(self)
         Set._globalcount += 1
@@ -593,6 +594,16 @@ class Set(object):
     def horizontal_facets(self, value):
         """Set the horizontal_facets flag"""
         self._horizontal_facets = value
+
+    @property
+    def horizontal_interior_facets(self):
+        """Default horizontal_interior_facets value"""
+        return self._horizontal_interior_facets
+
+    @horizontal_interior_facets.setter
+    def horizontal_interior_facets(self, value):
+        """Set the horizontal_interior_facets flag"""
+        self._horizontal_interior_facets = value
 
     def __str__(self):
         return "OP2 Set: %s with size %s" % (self._name, self._size)
@@ -909,6 +920,11 @@ class IterationSpace(object):
     def horizontal_facets(self):
         """horizontal_facets facets flag"""
         return self._iterset.horizontal_facets
+
+    @property
+    def horizontal_interior_facets(self):
+        """horizontal_interior_facets flag"""
+        return self._iterset.horizontal_interior_facets  
 
     @property
     def partition_size(self):

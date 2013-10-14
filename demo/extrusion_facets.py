@@ -352,3 +352,8 @@ op2.par_loop(volume_with_facets, elements,
              coords(op2.READ, facet_map))
 
 print "Interior Volume ", g.data
+
+#Make it all just work, no interim map needed.
+
+elements.horizontal_facets = False
+elements.horizontal_interior_facets = True

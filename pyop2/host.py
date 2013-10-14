@@ -360,6 +360,7 @@ class JITModule(base.JITModule):
         self._layers = itspace.layers
         self._iteration_layer = itspace.iteration_layer
         self._horizontal_facets = itspace.horizontal_facets
+        self._horizontal_interior_facets = itspace.horizontal_interior_facets
         self._args = args
 
     def __call__(self, *args):
