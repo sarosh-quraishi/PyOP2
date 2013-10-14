@@ -347,6 +347,8 @@ void comp_vol(double A[1], double *x[])
 
 elements.horizontal_facets = True
 
+g = op2.Global(1, data=0.0, name='g')
+
 op2.par_loop(volume_with_facets, elements,
              g(op2.INC),
              coords(op2.READ, facet_map))
@@ -357,3 +359,11 @@ print "Interior Volume ", g.data
 
 elements.horizontal_facets = False
 elements.horizontal_interior_facets = True
+
+g = op2.Global(1, data=0.0, name='g')
+
+op2.par_loop(volume_with_facets, elements,
+             g(op2.INC),
+             coords(op2.READ, elem_dofs))
+
+print "Interior Volume code generator", g.data

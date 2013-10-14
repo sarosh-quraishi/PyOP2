@@ -85,13 +85,19 @@ class Arg(base.Arg):
             val += self.c_vec_dec()
         return val
 
-    def c_ind_data(self, idx, j=0):
-        return "%(name)s + %(map_name)s[i * %(arity)s + %(idx)s] * %(dim)s%(off)s" % \
+    def c_ind_data(self, idx, j=0, times=1):
+        offset = ""
+        if times > 1:
+            offset = " + _off%(num)s[%(idx)d]" % \
+                        { 'num': self.c_offset(),
+                          'idx': idx }
+        return "%(name)s + (%(map_name)s[i * %(arity)s + %(idx)s]%(offset)s) * %(dim)s%(off)s" % \
             {'name': self.c_arg_name(),
              'map_name': self.c_map_name(),
              'arity': self.map.arity,
              'idx': idx,
              'dim': self.data.cdim,
+             'offset': offset, 
              'off': ' + %d' % j if j else ''}
 
     def c_ind_data_xtr(self, idx):
@@ -147,21 +153,26 @@ class Arg(base.Arg):
                 {'name': self.c_arg_name(),
                  'dim': self.data.cdim}
 
-    def c_vec_init(self):
+    def c_vec_init(self, double):
         val = []
+        times = 1
+        if double:
+            times = 2
         if self._flatten:
-            for j in range(self.data.dataset.cdim):
+            for t in range(times):
+                for j in range(self.data.dataset.cdim):
+                    for idx in range(self.map.arity):
+                        val.append("%(vec_name)s[%(idx)s] = %(data)s" %
+                                   {'vec_name': self.c_vec_name(),
+                                    'idx': j * self.map.arity + idx + self.map.arity * t,
+                                    'data': self.c_ind_data(idx, j, t+1)})
+        else:
+            for t in range(times):
                 for idx in range(self.map.arity):
                     val.append("%(vec_name)s[%(idx)s] = %(data)s" %
                                {'vec_name': self.c_vec_name(),
-                                'idx': j * self.map.arity + idx,
-                                'data': self.c_ind_data(idx, j)})
-        else:
-            for idx in range(self.map.arity):
-                val.append("%(vec_name)s[%(idx)s] = %(data)s" %
-                           {'vec_name': self.c_vec_name(),
-                            'idx': idx,
-                            'data': self.c_ind_data(idx)})
+                                'idx': idx + self.map.arity * t,
+                                'data': self.c_ind_data(idx, times=t+1)})
         return ";\n".join(val)
 
     def c_addto_scalar_field(self, extruded):
@@ -252,12 +263,20 @@ class Arg(base.Arg):
         else:
             raise RuntimeError("Don't know how to zero temp array for %s" % self)
 
-    def c_add_offset(self):
-        return '\n'.join(["%(name)s[%(j)d] += _off%(num)s[%(j)d] * %(dim)s;" %
+    def c_add_offset(self, double):
+        res = '\n'.join(["%(name)s[%(j)d] += _off%(num)s[%(j)d] * %(dim)s;" %
                           {'name': self.c_vec_name(),
                            'j': j,
                            'num': self.c_offset(),
                            'dim': self.data.cdim} for j in range(self.map.arity)])
+        if double:
+            res+= '\n'.join(["%(name)s[%(j)d] += _off%(num)s[%(j_off)d] * %(dim)s;" %
+                          {'name': self.c_vec_name(),
+                           'j': j + self.map.arity,
+                           'j_off': j,
+                           'num': self.c_offset(),
+                           'dim': self.data.cdim} for j in range(self.map.arity)])
+        return res
 
     def c_multiply_offset(self, layer_num):
         return '\n'.join(["%(name)s[%(j)d] += %(layer)s * _off%(num)s[%(j)d] * %(dim)s;" %
@@ -439,7 +458,7 @@ class JITModule(base.JITModule):
                              for count, arg in enumerate(self._args)]
         _kernel_it_args = ["i_%d" % d for d in range(len(self._extents))]
         _kernel_args = ', '.join(_kernel_user_args + _kernel_it_args)
-        _vec_inits = ';\n'.join([arg.c_vec_init() for arg in self._args
+        _vec_inits = ';\n'.join([arg.c_vec_init(self._horizontal_interior_facets) for arg in self._args
                                  if not arg._is_mat and arg._is_vec_map])
 
         nloops = len(self._extents)
@@ -499,10 +518,12 @@ class JITModule(base.JITModule):
             else:
                 _apply_offset += ';\n'.join([arg.c_add_offset_map() for arg in self._args
                                              if arg._uses_itspace])
-                _apply_offset += ';\n'.join([arg.c_add_offset() for arg in self._args
+                _apply_offset += ';\n'.join([arg.c_add_offset(self._horizontal_interior_facets) for arg in self._args
                                              if arg._is_vec_map])
+                #_apply_offset += ';\n'.join([arg.c_add_offset() for arg in self._args
+                #                             if arg._is_vec_map])
 
-                if self._horizontal_facets:
+                if self._horizontal_facets or self._horizontal_interior_facets:
                     _extr_loop = '\n' + extrusion_loop(self._layers - 2)
                 else:
                     _extr_loop = '\n' + extrusion_loop(self._layers - 1)
