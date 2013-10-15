@@ -47,6 +47,12 @@ __global__ void {{ parloop._stub_name }} (
     {%- endfor %}
     {%- endfor %}
 
+    {%- for arg in parloop._all_flattened_inc_vec_like_args %}
+    {% for i in range(arg.map.arity * arg.data.cdim) %}
+    {{arg.ctype}} {{arg._local_name(idx=i)}}[1];
+    {%- endfor %}
+    {%- endfor %}
+
     {%- for arg in parloop._all_global_reduction_args %}
     {{arg.ctype}} {{arg._reduction_local_name}}[{{arg.data.cdim}}];
     {% endfor %}
@@ -61,9 +67,21 @@ __global__ void {{ parloop._stub_name }} (
     };
     {%- endfor %}
 
+    {%- for arg in parloop._all_flattened_inc_vec_like_args %}
+    {{arg.ctype}} *{{arg._vec_name}}[{{arg.map.arity * arg.data.cdim}}] = {
+        {%- set comma = joiner(", ") -%}
+        {%- for i in range(arg.map.arity * arg.data.cdim) %}
+        {{- comma() }}
+        {{ arg._local_name(idx=i) }}
+        {%- endfor %}
+    };
+    {%- endfor %}
+
     {%- for arg in parloop._all_non_inc_vec_map_args %}
-    {%- set cdim = arg.data.dataset.cdim if arg._flatten else 1 %}
-    {{arg.ctype}} *{{arg._vec_name}}[{{arg.map.arity * cdim}}];
+    {{arg.ctype}} *{{arg._vec_name}}[{{arg.map.arity}}];
+    {%- endfor %}
+    {%- for arg in parloop._all_flattened_non_inc_vec_map_args %}
+    {{arg.ctype}} *{{arg._vec_name}}[{{arg.map.arity * arg.data.cdim}}];
     {%- endfor %}
 
     {% for arg in parloop._all_global_reduction_args %}
@@ -131,18 +149,17 @@ __global__ void {{ parloop._stub_name }} (
         if ( idx < nelem ) {
         {%- endif %}
             {%- for arg in parloop._all_non_inc_vec_map_args %}
-            {%- if arg._flatten %}
+            {%- for i in range(arg.map.arity) %}
+            {{arg._vec_name}}[{{i}}] = {{arg._shared_name}} + loc_map[{{arg._which_indirect + i}}*set_size + idx + offset_b]*{{arg.data.cdim}};
+            {%- endfor -%}
+            {%- endfor %}
+            {%- for arg in parloop._all_flattened_non_inc_vec_map_args %}
             {%- for j in range(arg.data.dataset.cdim) %}
             {%- for i in range(arg.map.arity) %}
             {{arg._vec_name}}[{{j * arg.map.arity + i}}] = {{arg._shared_name}} + loc_map[{{arg._which_indirect + i}}*set_size + idx + offset_b]*{{arg.data.cdim}} + {{j}};
             {%- endfor -%}
             {%- endfor -%}
-            {%- else %}
-            {%- for i in range(arg.map.arity) %}
-            {{arg._vec_name}}[{{i}}] = {{arg._shared_name}} + loc_map[{{arg._which_indirect + i}}*set_size + idx + offset_b]*{{arg.data.cdim}};
             {%- endfor -%}
-            {% endif %}
-            {%- endfor %}
             // initialise locals
             {% for arg in parloop._all_inc_non_vec_map_indirect_dat_args %}
             for ( int idx2 = 0; idx2 < {{arg.data.cdim}}; ++idx2 ) {
@@ -157,6 +174,13 @@ __global__ void {{ parloop._stub_name }} (
                 {%- endfor %}
             }
             {% endfor %}
+
+            {% for arg in parloop._all_flattened_inc_vec_like_args %}
+            {%- for i in range(arg.map.arity * arg.data.cdim) %}
+            {{arg._local_name(idx=i)}}[0] = ({{arg.ctype}})0;
+            {%- endfor %}
+            {% endfor %}
+
             {% for r in parloop._it_space.extents %}
             for ( int i{{loop.index0}} = 0; i{{loop.index0}} < {{r}}; ++i{{loop.index0}} ) {
             {% endfor %}
@@ -191,10 +215,14 @@ __global__ void {{ parloop._stub_name }} (
                 {%- for arg in parloop._all_inc_vec_like_args %}
                 for ( int idx2 = 0; idx2 < {{arg.data.cdim}}; ++idx2) {
                     {%- for i in range(arg.map.arity) %}
-                    {%- set tmp = 'loc_map[' ~ (arg._which_indirect + i) ~ ' * set_size + idx + offset_b]' %}
-                    {{arg._shared_name}}[idx2 + {{tmp}} * {{arg.data.cdim}}] += {{arg._local_name(idx=i)}}[idx2];
+                    {{arg._shared_name}}[idx2 + loc_map[{{arg._which_indirect + i}} * set_size + idx + offset_b] * {{arg.data.cdim}}] += {{arg._local_name(idx=i)}}[idx2];
                     {%- endfor %}
                 }
+                {%- endfor %}
+                {%- for arg in parloop._all_flattened_inc_vec_like_args %}
+                {%- for i in range(arg.map.arity * arg.data.cdim) %}
+                {{arg._shared_name}}[{{i // arg.map.arity}} + loc_map[{{arg._which_indirect + i % arg.map.arity}} * set_size + idx + offset_b] * {{arg.data.cdim}}] += {{arg._local_name(idx=i)}}[0];
+                {%- endfor %}
                 {%- endfor %}
             }
             __syncthreads();

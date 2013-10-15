@@ -72,12 +72,12 @@ class Arg(op2.Arg):
 
     def _indirect_kernel_arg_name(self, idx):
         if self._is_mat:
-            rmap = self.map[0]
+            rsize = self.map[0].arity * (self.data.dims[0] if self._flatten else 1)
             ridx = self.idx[0]
-            cmap = self.map[1]
+            csize = self.map[1].arity * (self.data.dims[1] if self._flatten else 1)
             cidx = self.idx[1]
-            esize = np.prod(self.data.dims)
-            size = esize * rmap.arity * cmap.arity
+            esize = 1 if self._flatten else np.prod(self.data.dims)
+            size = esize * rsize * csize
             d = {'n': self.name,
                  'offset': self._lmaoffset_name,
                  'idx': idx,
@@ -85,8 +85,8 @@ class Arg(op2.Arg):
                  'size': size,
                  '0': ridx.index,
                  '1': cidx.index,
-                 'lcdim': self.data.dims[1],
-                 'roff': cmap.arity * esize,
+                 'lcdim': 1 if self._flatten else self.data.dims[1],
+                 'roff': csize * esize,
                  'coff': esize}
             # We walk through the lma-data in order of the
             # alphabet:
@@ -679,7 +679,6 @@ class JITModule(base.JITModule):
             argtypes += inttype  # block offset
             argtypes += "PPPPP"  # blkmap, offset, nelems, nthrcol, thrcol
             argtypes += inttype  # number of colours in the block
-
         self._module = SourceModule(src, options=compiler_opts)
 
         # Upload Const data.

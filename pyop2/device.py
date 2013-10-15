@@ -340,7 +340,9 @@ class ParLoop(base.ParLoop):
                 if arg._is_indirect:
                     # Needed for indexing into ind_map/loc_map
                     arg._which_indirect = c
-                    if arg._is_vec_map:
+                    if arg._flatten:
+                        c += arg.map.arity * arg.data.cdim
+                    elif arg._is_vec_map:
                         c += arg.map.arity
                     elif arg._uses_itspace:
                         c += self._it_space.extents[arg.idx.index]
@@ -351,6 +353,16 @@ class ParLoop(base.ParLoop):
                     seen.add(key)
             else:
                 self.__unique_args.append(arg)
+        extents = list(self._it_space.extents)
+        for arg in self._actual_args:
+            if arg._is_mat and arg.data._is_vector_field and arg._flatten:
+                dims = arg.data.sparsity.dims
+                extents[0] *= dims[0]
+                extents[1] *= dims[1]
+                break
+            if arg._flatten and arg._uses_itspace:
+                extents[0] *= arg.data.cdim
+        self._it_space._extents = tuple(extents)
 
     def _get_arg_list(self, propname, arglist_name, keep=lambda x: True):
         attr = self._arg_dict.get(propname)
@@ -510,8 +522,14 @@ class ParLoop(base.ParLoop):
 
     @property
     def _all_non_inc_vec_map_args(self):
-        keep = lambda x: x._is_vec_map and x.access is not INC
+        keep = lambda x: not x._flatten and x._is_vec_map and x.access is not INC
         return self._get_arg_list('__all_non_inc_vec_map_args',
+                                  '_actual_args', keep)
+
+    @property
+    def _all_flattened_non_inc_vec_map_args(self):
+        keep = lambda x: x._flatten and x._is_vec_map and x.access is not INC
+        return self._get_arg_list('__all_flattened_non_inc_vec_map_args',
                                   '_actual_args', keep)
 
     @property
@@ -522,8 +540,14 @@ class ParLoop(base.ParLoop):
 
     @property
     def _all_inc_vec_like_args(self):
-        keep = lambda x: x.access is INC
+        keep = lambda x: not x._flatten and x.access is INC
         return self._get_arg_list('__all_inc_vec_like_args',
+                                  '_all_vec_like_args', keep)
+
+    @property
+    def _all_flattened_inc_vec_like_args(self):
+        keep = lambda x: x._flatten and x.access is INC
+        return self._get_arg_list('__all_flattened_inc_vec_like_args',
                                   '_all_vec_like_args', keep)
 
     @property
