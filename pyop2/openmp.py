@@ -178,6 +178,7 @@ void wrap_%(kernel_name)s__(PyObject* _boffset,
       {
         %(vec_inits)s;
         %(map_init)s;
+        %(jump_to_layer)s;
         %(extr_loop)s
         %(itspace_loops)s
         %(zero_tmps)s;

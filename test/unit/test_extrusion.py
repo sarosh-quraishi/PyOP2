@@ -561,7 +561,7 @@ void comp_vol(double A[1], double *x[], double *y[])
 
     # TODO: extend for higher order elements
 
-    def test_bottom_facet(
+    def test_bottom_facets(
         self, backend, xtr_elements, extruded_coords, xtr_elem_node,
         area_bottom):
         g = op2.Global(1, data=0.0, name='g')
@@ -574,6 +574,18 @@ void comp_vol(double A[1], double *x[], double *y[])
         assert int(g.data[0]) == 1.0
         xtr_elements.iteration_layer = None
 
+    def test_top_facets(
+        self, backend, xtr_elements, extruded_coords, xtr_elem_node,
+        area_top):
+        g = op2.Global(1, data=0.0, name='g')
+        xtr_elements.iteration_layer = layers - 1
+
+        op2.par_loop(area_top, xtr_elements,
+                     g(op2.INC),
+                     extruded_coords(op2.READ, xtr_elem_node))
+
+        assert int(g.data[0]) == 1.0
+        xtr_elements.iteration_layer = None
 
 if __name__ == '__main__':
     import os
