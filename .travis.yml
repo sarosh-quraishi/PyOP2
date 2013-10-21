@@ -21,5 +21,6 @@ before_install:
 install: "python setup.py develop"
 # command to run tests
 script:
+  - git diff $TRAVIS_COMMIT_RANGE --check
   - make lint
   - PYTEST_VERBOSE=1 make unit_sequential regression_sequential unit_openmp regression_openmp
