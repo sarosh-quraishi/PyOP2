@@ -82,6 +82,9 @@ noDofs = len(A[0]) * noDofs[0] + noDofs[1]
 map_dofs_coords = 6
 map_dofs_field = 1
 
+coords_dim = 3
+coords_xtr_dim = 3
+
 # CRATE THE MAPS
 # elems to nodes
 elems2nodes = numpy.zeros(mesh2d[0] * nelems, dtype=numpy.int32)
@@ -257,8 +260,9 @@ def xtr_dnodes(xtr_nodes):
 
 @pytest.fixture
 def xtr_elem_node(xtr_elements, xtr_nodes):
-    return op2.Map(xtr_elements, xtr_nodes, 6, xtr_elem_node_map, "xtr_elem_node",
-                   numpy.array([1, 1, 1, 1, 1, 1], dtype=numpy.int32))
+    return op2.Map(
+        xtr_elements, xtr_nodes, 6, xtr_elem_node_map, "xtr_elem_node",
+        numpy.array([1, 1, 1, 1, 1, 1], dtype=numpy.int32))
 
 
 @pytest.fixture
@@ -301,6 +305,73 @@ void extrusion_kernel(double *xtr[], double *x[], int* j[])
 
 
 @pytest.fixture
+def vnodes(iterset_coords):
+    return op2.DataSet(iterset_coords, coords_dim)
+
+
+@pytest.fixture
+def iterset_coords():
+    # BIG TRICK HERE:
+    # We need the +1 in order to include the entire column of vertices.
+    # Extrusion is meant to iterate over the 3D cells which are layer - 1 in number.
+    # The +1 correction helps in the case of iteration over vertices which need
+    # one extra layer.
+    return op2.Set(NUM_NODES, "verts1", layers=(layers + 1))
+
+
+@pytest.fixture
+def d_lnodes_xtr(xtr_nodes):
+    return op2.DataSet(xtr_nodes, 1)
+
+
+@pytest.fixture
+def d_nodes_xtr(xtr_nodes):
+    return op2.DataSet(xtr_nodes, coords_xtr_dim)
+
+
+@pytest.fixture
+def extruded_coords(xtr_coords, vnodes, iterset_coords, xtr_nodes,
+                    extrusion_kernel, d_lnodes_xtr, d_nodes_xtr):
+    coords_vec = numpy.zeros(vnodes.total_size * coords_dim)
+    length = len(xtr_coords.flatten())
+    coords_vec[0:length] = xtr_coords.flatten()
+    coords = op2.Dat(vnodes, coords_vec, numpy.float64, "dat1")
+
+    # Create an op2.Dat with slots for the extruded coordinates
+    coords_new = numpy.array(
+        [0.] * layers * NUM_NODES * coords_xtr_dim, dtype=numpy.float64)
+    coords_xtr = op2.Dat(d_nodes_xtr, coords_new, numpy.float64, "dat_xtr")
+
+    # Creat an op2.Dat to hold the layer number
+    layer_vec = numpy.tile(numpy.arange(0, layers), NUM_NODES)
+    layer = op2.Dat(d_lnodes_xtr, layer_vec, numpy.int32, "dat_layer")
+
+    # Map a map for the bottom of the mesh.
+    vertex_to_coords = [i for i in range(0, NUM_NODES)]
+    v2coords_offset = numpy.array([0], numpy.int32)
+    map_2d = op2.Map(iterset_coords, iterset_coords, 1, vertex_to_coords,
+                     "v2coords", v2coords_offset)
+
+    # Create Map for extruded vertices
+    vertex_to_xtr_coords = [layers * i for i in range(0, NUM_NODES)]
+    v2xtr_coords_offset = numpy.array([1], numpy.int32)
+    map_xtr = op2.Map(
+        iterset_coords, xtr_nodes, 1, vertex_to_xtr_coords, "v2xtr_coords", v2xtr_coords_offset)
+
+    # Create Map for layer number
+    v2xtr_layer_offset = numpy.array([1], numpy.int32)
+    layer_xtr = op2.Map(
+        iterset_coords, xtr_nodes, 1, vertex_to_xtr_coords, "v2xtr_layer", v2xtr_layer_offset)
+
+    op2.par_loop(extrusion_kernel, iterset_coords,
+                 coords_xtr(op2.INC, map_xtr),
+                 coords(op2.READ, map_2d),
+                 layer(op2.READ, layer_xtr))
+
+    return coords_xtr
+
+
+@pytest.fixture
 def vol_comp():
         kernel_code = """
 void vol_comp(double A[1][1], double *x[], int i0, int i1)
@@ -326,6 +397,54 @@ void vol_comp_rhs(double A[1], double *x[], int *y[], int i0)
   A[0] += 0.5 * area * (x[1][2] - x[0][2]) * y[0][0];
 }"""
         return op2.Kernel(kernel_code, "vol_comp_rhs")
+
+
+@pytest.fixture
+def area_bottom():
+        kernel_code = """
+void area_bottom(double A[1], double *x[])
+{
+  double area = x[0][0]*(x[2][1]-x[4][1]) + x[2][0]*(x[4][1]-x[0][1])
+               + x[4][0]*(x[0][1]-x[2][1]);
+  if (area < 0)
+    area = area * (-1.0);
+  A[0]+=0.5*area;
+}"""
+        return op2.Kernel(kernel_code, "area_bottom")
+
+
+@pytest.fixture
+def area_top():
+        kernel_code = """
+void area_top(double A[1], double *x[])
+{
+  double area = x[1][0]*(x[3][1]-x[5][1]) + x[3][0]*(x[5][1]-x[1][1])
+               + x[5][0]*(x[1][1]-x[3][1]);
+  if (area < 0)
+    area = area * (-1.0);
+  A[0]+=0.5*area;
+}"""
+        return op2.Kernel(kernel_code, "area_top")
+
+
+@pytest.fixture
+def vol_comp_interior_horizontal():
+        kernel_code = """
+void vol_comp_interior_horizontal(double A[1], double *x[])
+{
+  double area_prev = x[0][0]*(x[2][1]-x[4][1]) + x[2][0]*(x[4][1]-x[0][1])
+               + x[4][0]*(x[0][1]-x[2][1]);
+  if (area_prev < 0)
+    area_prev = area_prev * (-1.0);
+  A[0]+=0.5*area_prev * (x[1][2] - x[0][2]);
+
+  double area_next = x[6][0]*(x[8][1]-x[10][1]) + x[8][0]*(x[10][1]-x[6][1])
+               + x[10][0]*(x[6][1]-x[8][1]);
+  if (area_next < 0)
+    area_next = area_next * (-1.0);
+  A[0]+=0.5*area_next * (x[7][2] - x[6][2]);
+}"""
+        return op2.Kernel(kernel_code, "vol_comp_interior_horizontal")
 
 
 class TestExtrusion:
@@ -409,60 +528,15 @@ void comp_vol(double A[1], double *x[], double *y[])
     def test_extruded_assemble_mat_rhs_solve(
         self, backend, xtr_mat, xtr_coords, xtr_elements,
         xtr_elem_node, extrusion_kernel, xtr_nodes, vol_comp,
-            xtr_dnodes, vol_comp_rhs, xtr_b):
-        coords_dim = 3
-        coords_xtr_dim = 3  # dimension
-        # BIG TRICK HERE:
-        # We need the +1 in order to include the entire column of vertices.
-        # Extrusion is meant to iterate over the 3D cells which are layer - 1 in number.
-        # The +1 correction helps in the case of iteration over vertices which need
-        # one extra layer.
-        iterset = op2.Set(NUM_NODES, "verts1", layers=(layers + 1))
-        vnodes = op2.DataSet(iterset, coords_dim)
-
-        d_nodes_xtr = op2.DataSet(xtr_nodes, coords_xtr_dim)
-        d_lnodes_xtr = op2.DataSet(xtr_nodes, 1)
-
-        # Create an op2.Dat with the base mesh coordinates
-        coords_vec = numpy.zeros(vnodes.total_size * coords_dim)
-        length = len(xtr_coords.flatten())
-        coords_vec[0:length] = xtr_coords.flatten()
-        coords = op2.Dat(vnodes, coords_vec, numpy.float64, "dat1")
-
-        # Create an op2.Dat with slots for the extruded coordinates
-        coords_new = numpy.array(
-            [0.] * layers * NUM_NODES * coords_xtr_dim, dtype=numpy.float64)
-        coords_xtr = op2.Dat(d_nodes_xtr, coords_new, numpy.float64, "dat_xtr")
-
-        # Creat an op2.Dat to hold the layer number
-        layer_vec = numpy.tile(numpy.arange(0, layers), NUM_NODES)
-        layer = op2.Dat(d_lnodes_xtr, layer_vec, numpy.int32, "dat_layer")
-
-        # Map a map for the bottom of the mesh.
-        vertex_to_coords = [i for i in range(0, NUM_NODES)]
-        v2coords_offset = numpy.array([0], numpy.int32)
-        map_2d = op2.Map(iterset, iterset, 1, vertex_to_coords, "v2coords", v2coords_offset)
-
-        # Create Map for extruded vertices
-        vertex_to_xtr_coords = [layers * i for i in range(0, NUM_NODES)]
-        v2xtr_coords_offset = numpy.array([1], numpy.int32)
-        map_xtr = op2.Map(
-            iterset, xtr_nodes, 1, vertex_to_xtr_coords, "v2xtr_coords", v2xtr_coords_offset)
-
-        # Create Map for layer number
-        v2xtr_layer_offset = numpy.array([1], numpy.int32)
-        layer_xtr = op2.Map(
-            iterset, xtr_nodes, 1, vertex_to_xtr_coords, "v2xtr_layer", v2xtr_layer_offset)
-
-        op2.par_loop(extrusion_kernel, iterset,
-                     coords_xtr(op2.INC, map_xtr),
-                     coords(op2.READ, map_2d),
-                     layer(op2.READ, layer_xtr))
-
+        xtr_dnodes, vol_comp_rhs, xtr_b, extruded_coords,
+        d_lnodes_xtr):
         # Assemble the main matrix.
         op2.par_loop(vol_comp, xtr_elements,
-                     xtr_mat(op2.INC, (xtr_elem_node[op2.i[0]], xtr_elem_node[op2.i[1]])),
-                     coords_xtr(op2.READ, xtr_elem_node))
+                     xtr_mat(
+                         op2.INC,
+                         (xtr_elem_node[op2.i[0]],
+                          xtr_elem_node[op2.i[1]])),
+                     extruded_coords(op2.READ, xtr_elem_node))
 
         eps = 1.e-5
         assert_allclose(sum(sum(xtr_mat.values)), 36.0, eps)
@@ -473,7 +547,7 @@ void comp_vol(double A[1], double *x[], double *y[])
 
         op2.par_loop(vol_comp_rhs, xtr_elements,
                      xtr_b(op2.INC, xtr_elem_node[op2.i[0]]),
-                     coords_xtr(op2.READ, xtr_elem_node),
+                     extruded_coords(op2.READ, xtr_elem_node),
                      xtr_f(op2.READ, xtr_elem_node))
 
         assert_allclose(sum(xtr_b.data), 6.0, eps)
@@ -486,6 +560,20 @@ void comp_vol(double A[1], double *x[], double *y[])
         assert_allclose(sum(xtr_x.data), 7.3333333, eps)
 
     # TODO: extend for higher order elements
+
+    def test_bottom_facet(
+        self, backend, xtr_elements, extruded_coords, xtr_elem_node,
+        area_bottom):
+        g = op2.Global(1, data=0.0, name='g')
+        xtr_elements.iteration_layer = 1
+
+        op2.par_loop(area_bottom, xtr_elements,
+                     g(op2.INC),
+                     extruded_coords(op2.READ, xtr_elem_node))
+
+        assert int(g.data[0]) == 1.0
+        xtr_elements.iteration_layer = None
+
 
 if __name__ == '__main__':
     import os

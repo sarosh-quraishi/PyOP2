@@ -59,29 +59,6 @@ mesh_name = opt['mesh']
 layers = int(opt['layers'])
 partition_size = int(opt['partsize'])
 
-# Generate code for kernel
-
-bottom_area = op2.Kernel("""
-void comp_vol(double A[1], double *x[])
-{
-  double area = x[0][0]*(x[2][1]-x[4][1]) + x[2][0]*(x[4][1]-x[0][1])
-               + x[4][0]*(x[0][1]-x[2][1]);
-  if (area < 0)
-    area = area * (-1.0);
-  A[0]+=0.5*area;
-}""", "comp_vol")
-
-top_area = op2.Kernel("""
-void comp_vol(double A[1], double *x[])
-{
-  double area = x[1][0]*(x[3][1]-x[5][1]) + x[3][0]*(x[5][1]-x[1][1])
-               + x[5][0]*(x[1][1]-x[3][1]);
-  if (area < 0)
-    area = area * (-1.0);
-  A[0]+=0.5*area;
-}""", "comp_vol")
-
-
 # Set up simulation data structures
 valuetype = np.float64
 
@@ -265,7 +242,16 @@ elem_dofs = op2.Map(elements, coords_dofsSet, map_dofs_coords, ind_coords,
 elem_elem = op2.Map(elements, wedges_dofsSet, map_dofs_field, ind_field,
                     "elem_elem", off_field)
 
-# Compute top area
+bottom_area = op2.Kernel("""
+void comp_vol(double A[1], double *x[])
+{
+  double area = x[0][0]*(x[2][1]-x[4][1]) + x[2][0]*(x[4][1]-x[0][1])
+               + x[4][0]*(x[0][1]-x[2][1]);
+  if (area < 0)
+    area = area * (-1.0);
+  A[0]+=0.5*area;
+}""", "comp_vol")
+# Compute bottom area
 g = op2.Global(1, data=0.0, name='g')
 
 # Set the iteration space to include only the bottom layer of cells
@@ -275,6 +261,16 @@ op2.par_loop(bottom_area, elements,
              coords(op2.READ, elem_dofs))
 
 print "Bottom area", g.data
+
+top_area = op2.Kernel("""
+void comp_vol(double A[1], double *x[])
+{
+  double area = x[1][0]*(x[3][1]-x[5][1]) + x[3][0]*(x[5][1]-x[1][1])
+               + x[5][0]*(x[1][1]-x[3][1]);
+  if (area < 0)
+    area = area * (-1.0);
+  A[0]+=0.5*area;
+}""", "comp_vol")
 
 # Compute top area
 g = op2.Global(1, data=0.0, name='g')
