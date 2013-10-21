@@ -428,23 +428,23 @@ void area_top(double A[1], double *x[])
 
 
 @pytest.fixture
-def vol_comp_interior_horizontal():
+def vol_interior_horizontal():
         kernel_code = """
-void vol_comp_interior_horizontal(double A[1], double *x[])
+void vol_interior_horizontal(double A[1], double *x[])
 {
   double area_prev = x[0][0]*(x[2][1]-x[4][1]) + x[2][0]*(x[4][1]-x[0][1])
                + x[4][0]*(x[0][1]-x[2][1]);
   if (area_prev < 0)
     area_prev = area_prev * (-1.0);
-  A[0]+=0.5*area_prev * (x[1][2] - x[0][2]);
+  A[0]+=0.5*area_prev * 0.1; //(x[1][2] - x[0][2]);
 
   double area_next = x[6][0]*(x[8][1]-x[10][1]) + x[8][0]*(x[10][1]-x[6][1])
                + x[10][0]*(x[6][1]-x[8][1]);
   if (area_next < 0)
     area_next = area_next * (-1.0);
-  A[0]+=0.5*area_next * (x[7][2] - x[6][2]);
+  A[0]+=0.5*area_next * 0.1; //(x[7][2] - x[6][2]);
 }"""
-        return op2.Kernel(kernel_code, "vol_comp_interior_horizontal")
+        return op2.Kernel(kernel_code, "vol_interior_horizontal")
 
 
 class TestExtrusion:
@@ -586,6 +586,20 @@ void comp_vol(double A[1], double *x[], double *y[])
 
         assert int(g.data[0]) == 1.0
         xtr_elements.iteration_layer = None
+
+    def test_interior_horizontal_facets(
+        self, backend, xtr_elements, extruded_coords, xtr_elem_node,
+        vol_interior_horizontal):
+        g = op2.Global(1, data=0.0, name='g')
+        xtr_elements.horizontal_facets = False
+        xtr_elements.horizontal_interior_facets = True
+
+        op2.par_loop(vol_interior_horizontal, xtr_elements,
+                     g(op2.INC),
+                     extruded_coords(op2.READ, xtr_elem_node))
+
+        assert abs(g.data[0] - 1.8) <= 1.e-7
+        xtr_elements.horizontal_interior_facets = False
 
 if __name__ == '__main__':
     import os

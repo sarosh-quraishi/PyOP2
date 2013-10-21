@@ -63,14 +63,16 @@ class Arg(base.Arg):
                 val += ", PyObject *_%(name)s" % {'name': self.c_map_name(idx)}
         return val
 
-    def c_vec_dec(self):
+    def c_vec_dec(self, horizontal_facets):
         cdim = self.data.dataset.cdim if self._flatten else 1
-        return ";\n%(type)s *%(vec_name)s[%(arity)s]" % \
+        dsize = 2 if horizontal_facets else 1
+        return ";\n%(type)s *%(vec_name)s[%(arity)s*%(dsize)s]" % \
             {'type': self.ctype,
              'vec_name': self.c_vec_name(),
-             'arity': self.map.arity * cdim}
+             'arity': self.map.arity * cdim,
+             'dsize' : str(dsize)}
 
-    def c_wrapper_dec(self):
+    def c_wrapper_dec(self, horizontal_facets):
         if self._is_mat:
             val = "Mat %(name)s = (Mat)((uintptr_t)PyLong_AsUnsignedLong(_%(name)s))" % \
                 {"name": self.c_arg_name()}
@@ -82,7 +84,7 @@ class Arg(base.Arg):
                 val += ";\nint *%(name)s = (int *)(((PyArrayObject *)_%(name)s)->data)" % \
                        {'name': self.c_map_name(idx)}
         if self._is_vec_map:
-            val += self.c_vec_dec()
+            val += self.c_vec_dec(horizontal_facets)
         return val
 
     def c_ind_data(self, idx, j=0, times=1):
@@ -452,7 +454,7 @@ class JITModule(base.JITModule):
 
         _local_tensor_decs = ';\n'.join(
             [arg.c_local_tensor_dec(self._extents) for arg in self._args if arg._is_mat])
-        _wrapper_decs = ';\n'.join([arg.c_wrapper_dec() for arg in self._args])
+        _wrapper_decs = ';\n'.join([arg.c_wrapper_dec(self._horizontal_interior_facets) for arg in self._args])
 
         _kernel_user_args = [arg.c_kernel_arg(count)
                              for count, arg in enumerate(self._args)]

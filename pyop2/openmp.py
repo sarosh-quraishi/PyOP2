@@ -75,12 +75,14 @@ class Arg(host.Arg):
     def c_local_tensor_name(self):
         return self.c_kernel_arg_name(str(_max_threads))
 
-    def c_vec_dec(self):
+    def c_vec_dec(self, horizontal_facets):
         cdim = self.data.dataset.cdim if self._flatten else 1
-        return ";\n%(type)s *%(vec_name)s[%(arity)s]" % \
+        dsize = 2 if horizontal_facets else 1
+        return ";\n%(type)s *%(vec_name)s[%(arity)s*%(dsize)s]" % \
             {'type': self.ctype,
              'vec_name': self.c_vec_name(str(_max_threads)),
-             'arity': self.map.arity * cdim}
+             'arity': self.map.arity * cdim,
+             'dsize': str(dsize)}
 
     def padding(self):
         return int(_padding * (self.data.cdim / _padding + 1)) * \
