@@ -2163,7 +2163,9 @@ class ParLoop(LazyComputation):
         self._it_space = IterationSpace(iterset, self.check_args(iterset))
 
     def _run(self):
-        return self.compute()
+        tic("self.kernel.name")
+        self.compute()
+        toc("self.kernel.name")
 
     @collective
     def compute(self):
