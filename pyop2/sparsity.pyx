@@ -65,78 +65,20 @@ cdef cmap init_map(omap):
     out.layers = omap.iterset.layers
     return out
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef build_sparsity_pattern_seq(int rmult, int cmult, int nrows, list maps):
-    """Create and populate auxiliary data structure: for each element of the
-    from set, for each row pointed to by the row map, add all columns pointed
-    to by the col map."""
-    cdef:
-        int e, i, r, d, c
-        int lsize, rsize, row
-        cmap rowmap, colmap
-        vector[set[int]] s_diag
-        set[int].iterator it
-
-    lsize = nrows*rmult
-    s_diag = vector[set[int]](lsize)
-
-    for rmap, cmap in maps:
-        rowmap = init_map(rmap)
-        colmap = init_map(cmap)
-        rsize = rowmap.from_size
-        if rowmap.layers > 1:
-            for e in range(rsize):
-                for i in range(rowmap.arity):
-                    for r in range(rmult):
-                        for l in range(rowmap.layers - 1):
-                            row = rmult * rowmap.values[i + e*rowmap.arity] + r + l * rowmap.offset[i]
-                            for d in range(colmap.arity):
-                                for c in range(cmult):
-                                    s_diag[row].insert(cmult * colmap.values[d + e * colmap.arity] +
-                                                       c + l * colmap.offset[d])
-        else:
-            for e in range(rsize):
-                for i in range(rowmap.arity):
-                    for r in range(rmult):
-                            row = rmult * rowmap.values[i + e*rowmap.arity] + r
-                            for d in range(colmap.arity):
-                                for c in range(cmult):
-                                    s_diag[row].insert(cmult * colmap.values[d + e * colmap.arity] + c)
-
-    # Create final sparsity structure
-    cdef np.ndarray[DTYPE_t, ndim=1] nnz = np.empty(lsize, dtype=np.int32)
-    cdef np.ndarray[DTYPE_t, ndim=1] rowptr = np.empty(lsize + 1, dtype=np.int32)
-    rowptr[0] = 0
-    for row in range(lsize):
-        nnz[row] = s_diag[row].size()
-        rowptr[row+1] = rowptr[row] + nnz[row]
-
-    cdef np.ndarray[DTYPE_t, ndim=1] colidx = np.empty(rowptr[lsize], dtype=np.int32)
-    # Note: elements in a set are always sorted, so no need to sort colidx
-    for row in range(lsize):
-        i = rowptr[row]
-        it = s_diag[row].begin()
-        while it != s_diag[row].end():
-            colidx[i] = deref(it)
-            inc(it)
-            i += 1
-
-    return rowptr[lsize], nnz, rowptr, colidx
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef build_sparsity_pattern_mpi(int rmult, int cmult, int nrows, list maps):
+cdef build_sparsity_pattern(int nrows, list maps):
     """Create and populate auxiliary data structure: for each element of the
     from set, for each row pointed to by the row map, add all columns pointed
     to by the col map."""
     cdef:
         int lsize, rsize, row, entry
-        int e, i, r, d, c
+        int e, i, d
         cmap rowmap, colmap
         vector[set[int]] s_diag, s_odiag
 
-    lsize = nrows*rmult
+    lsize = nrows
     s_diag = vector[set[int]](lsize)
     s_odiag = vector[set[int]](lsize)
 
@@ -147,62 +89,74 @@ cdef build_sparsity_pattern_mpi(int rmult, int cmult, int nrows, list maps):
         if rowmap.layers > 1:
             for e in range (rsize):
                 for i in range(rowmap.arity):
-                    for r in range(rmult):
-                        for l in range(rowmap.layers - 1):
-                            row = rmult * rowmap.values[i + e*rowmap.arity] + r + l * rowmap.offset[i]
-                            # NOTE: this hides errors due to invalid map entries
-                            if row < lsize:
-                                for d in range(colmap.arity):
-                                    for c in range(cmult):
-                                        entry = cmult * colmap.values[d + e * colmap.arity] + c + l * colmap.offset[d]
-                                        if entry < lsize:
-                                            s_diag[row].insert(entry)
-                                        else:
-                                            s_odiag[row].insert(entry)
+                    for l in range(rowmap.layers - 1):
+                        row = rowmap.values[i + e*rowmap.arity] + l * rowmap.offset[i]
+                        # NOTE: this hides errors due to invalid map entries
+                        if row < lsize:
+                            for d in range(colmap.arity):
+                                entry = colmap.values[d + e * colmap.arity] + l * colmap.offset[d]
+                                if entry < lsize:
+                                    s_diag[row].insert(entry)
+                                else:
+                                    s_odiag[row].insert(entry)
         else:
             for e in range (rsize):
                 for i in range(rowmap.arity):
-                    for r in range(rmult):
-                            row = rmult * rowmap.values[i + e*rowmap.arity] + r
-                            # NOTE: this hides errors due to invalid map entries
-                            if row < lsize:
-                                for d in range(colmap.arity):
-                                    for c in range(cmult):
-                                        entry = cmult * colmap.values[d + e * colmap.arity] + c
-                                        if entry < lsize:
-                                            s_diag[row].insert(entry)
-                                        else:
-                                            s_odiag[row].insert(entry)
+                    row = rowmap.values[i + e*rowmap.arity]
+                    # NOTE: this hides errors due to invalid map entries
+                    if row < lsize:
+                        for d in range(colmap.arity):
+                            entry = colmap.values[d + e * colmap.arity]
+                            if entry < lsize:
+                                s_diag[row].insert(entry)
+                            else:
+                                s_odiag[row].insert(entry)
 
     # Create final sparsity structure
     cdef np.ndarray[DTYPE_t, ndim=1] d_nnz = np.empty(lsize, dtype=np.int32)
     cdef np.ndarray[DTYPE_t, ndim=1] o_nnz = np.empty(lsize, dtype=np.int32)
+    cdef np.ndarray[DTYPE_t, ndim=1] rowptr = np.empty(lsize + 1, dtype=np.int32)
     cdef int d_nz = 0
     cdef int o_nz = 0
+    rowptr[0] = 0
     for row in range(lsize):
         d_nnz[row] = s_diag[row].size()
         d_nz += d_nnz[row]
         o_nnz[row] = s_odiag[row].size()
+        rowptr[row+1] = rowptr[row] + d_nnz[row] + o_nnz[row]
         o_nz += o_nnz[row]
 
-    return d_nnz, o_nnz, d_nz, o_nz
+    cdef np.ndarray[DTYPE_t, ndim=1] colidx = np.empty(rowptr[lsize], dtype=np.int32)
+    # Merge on and off diagonal pieces and sort.
+    cdef np.ndarray[DTYPE_t, ndim=1] tmp = np.empty(d_nnz.max() + o_nnz.max(), dtype=np.int32)
+    cdef int j, k, max_val = np.iinfo(tmp.dtype).max
+    for row in range(lsize):
+        tmp[:] = max_val        # Don't pick up bad values
+        i = rowptr[row]
+        j = 0
+        it = s_diag[row].begin()
+        while it != s_diag[row].end():
+            tmp[j] = deref(it)
+            inc(it)
+            j += 1
+        it = s_odiag[row].begin()
+        while it != s_odiag[row].end():
+            tmp[j] = deref(it)
+            inc(it)
+            j += 1
+        tmp.sort()
+        for k in range(j):
+            colidx[i] = tmp[k]
+            i += 1
+
+    return d_nnz, o_nnz, d_nz, o_nz, rowptr, colidx
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def build_sparsity(object sparsity, bool parallel):
-    cdef int rmult, cmult
-    rmult, cmult = sparsity._dims
+def build_sparsity(object sparsity):
     cdef int nrows = sparsity._nrows
-    cdef int lsize = nrows*rmult
+    cdef int lsize = nrows
     cdef int nmaps = len(sparsity._rmaps)
 
-    if parallel:
-        sparsity._d_nnz, sparsity._o_nnz, sparsity._d_nz, sparsity._d_nz = \
-            build_sparsity_pattern_mpi(rmult, cmult, nrows, sparsity.maps)
-        sparsity._rowptr = []
-        sparsity._colidx = []
-    else:
-        sparsity._d_nz, sparsity._d_nnz, sparsity._rowptr, sparsity._colidx = \
-            build_sparsity_pattern_seq(rmult, cmult, nrows, sparsity.maps)
-        sparsity._o_nnz = []
-        sparsity._o_nz = 0
+    sparsity._d_nnz, sparsity._o_nnz, sparsity._d_nz, sparsity._o_nz, sparsity._rowptr, sparsity._colidx = \
+            build_sparsity_pattern(nrows, sparsity.maps)

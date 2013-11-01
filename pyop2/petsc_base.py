@@ -114,40 +114,42 @@ class Mat(base.Mat):
         if not self.dtype == PETSc.ScalarType:
             raise RuntimeError("Can only create a matrix of type %s, %s is not supported"
                                % (PETSc.ScalarType, self.dtype))
-        mat = PETSc.Mat()
+        mat = PETSc.Mat().create()
         row_lg = PETSc.LGMap()
         col_lg = PETSc.LGMap()
         rdim, cdim = self.sparsity.dims
+        rsize = self.sparsity.nrows * rdim
+        csize = self.sparsity.ncols * cdim
+        mat.setSizes(((rsize, None), (csize, None)))
+        mat.setBlockSizes(rdim, cdim)
+        mat.setType(mat.Type.AIJ)
+        onnz = None
+        if rdim == cdim and rdim != 1:
+            mat.setType(mat.Type.BAIJ)
+            nnz = self.sparsity.nnz
+            if MPI.comm.size > 1:
+                onnz = self.sparsity.onnz
+        else:
+            nnz = np.repeat(self.sparsity.nnz, rdim)
+            if MPI.comm.size > 1:
+                onnz = np.repeat(self.sparsity.onnz, rdim)
+        mat.setPreallocationNNZ((nnz, onnz))
+        mat.setUp()
         if MPI.comm.size == 1:
             # The PETSc local to global mapping is the identity in the sequential case
             row_lg.create(
-                indices=np.arange(self.sparsity.nrows * rdim, dtype=PETSc.IntType))
+                indices=np.arange(self.sparsity.nrows, dtype=PETSc.IntType))
             col_lg.create(
-                indices=np.arange(self.sparsity.ncols * cdim, dtype=PETSc.IntType))
-            self._array = np.zeros(self.sparsity.nz, dtype=PETSc.RealType)
-            # We're not currently building a blocked matrix, so need to scale the
-            # number of rows and columns by the sparsity dimensions
-            # FIXME: This needs to change if we want to do blocked sparse
-            # NOTE: using _rowptr and _colidx since we always want the host values
-            mat.createAIJWithArrays(
-                (self.sparsity.nrows * rdim, self.sparsity.ncols * cdim),
-                (self.sparsity._rowptr, self.sparsity._colidx, self._array))
+                indices=np.arange(self.sparsity.ncols, dtype=PETSc.IntType))
         else:
-            # FIXME: probably not right for vector fields
-            # We get the PETSc local to global mapping from the halo
             row_lg.create(indices=self.sparsity.rmaps[
                           0].toset.halo.global_to_petsc_numbering)
             col_lg.create(indices=self.sparsity.cmaps[
                           0].toset.halo.global_to_petsc_numbering)
-            mat.createAIJ(size=((self.sparsity.nrows * rdim, None),
-                                (self.sparsity.ncols * cdim, None)),
-                          nnz=(self.sparsity.nnz, self.sparsity.onnz))
-        mat.setLGMap(rmap=row_lg, cmap=col_lg)
+        mat.setLGMapBlock(rmap=row_lg, cmap=col_lg)
         # Do not stash entries destined for other processors, just drop them
         # (we take care of those in the halo)
         mat.setOption(mat.Option.IGNORE_OFF_PROC_ENTRIES, True)
-        # Do not create a zero location when adding a zero value
-        mat.setOption(mat.Option.IGNORE_ZERO_ENTRIES, True)
         # Any add or insertion that would generate a new entry that has not
         # been preallocated will raise an error
         mat.setOption(mat.Option.NEW_NONZERO_ALLOCATION_ERR, True)
@@ -155,6 +157,18 @@ class Mat(base.Mat):
         # the nonzero structure of the matrix. Otherwise PETSc would compact
         # the sparsity and render our sparsity caching useless.
         mat.setOption(mat.Option.KEEP_NONZERO_PATTERN, True)
+
+        # We call mat.assemble() before applying any dirichlet BCs,
+        # which leads to unset diagonal entries, so set the sparsity
+        # pattern explicitly in the matrix
+        mat.setValuesBlockedLocalCSR(self.sparsity._rowptr,
+                                     self.sparsity._colidx,
+                                     np.zeros(rdim*cdim*(self.sparsity.nz + self.sparsity.onz)),
+                                     addv=PETSc.InsertMode.INSERT)
+        mat.assemble()
+        if rdim == cdim and rdim == 1:
+            # Do not create a zero location when adding a zero value
+            mat.setOption(mat.Option.IGNORE_ZERO_ENTRIES, True)
         self._handle = mat
 
     @collective
@@ -179,6 +193,14 @@ class Mat(base.Mat):
         :param rows: a :class:`Subset` or an iterable"""
         base._trace.evaluate(set([self]), set([self]))
         rows = rows.indices if isinstance(rows, Subset) else rows
+        rowbs = self.sparsity.dims[0]
+        # PETSc doesn't support blocked row zeroing, so fix up the
+        # rows to zero here.  For example, for a row block size of 2,
+        # row indices [1 4 5] need to turn into [2 3 8 9 10 11].
+        if rowbs > 1:
+            rows = rows.repeat(rowbs) * rowbs
+            for i in range(1, rowbs):
+                rows[i::rowbs] += i
         self.handle.zeroRowsLocal(rows, diag_val)
 
     @collective
@@ -198,10 +220,7 @@ class Mat(base.Mat):
     @property
     def array(self):
         """Array of non-zero values."""
-        if not hasattr(self, '_array'):
-            self._init()
-        base._trace.evaluate(set([self]), set())
-        return self._array
+        raise NotImplementedError("You can't look at the values in a matrix directly")
 
     @property
     def values(self):

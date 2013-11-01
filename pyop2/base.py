@@ -1931,7 +1931,7 @@ class Sparsity(Cached):
 
         self._name = name or "sparsity_%d" % Sparsity._globalcount
         Sparsity._globalcount += 1
-        build_sparsity(self, parallel=MPI.parallel)
+        build_sparsity(self)
         self._initialized = True
 
     @property

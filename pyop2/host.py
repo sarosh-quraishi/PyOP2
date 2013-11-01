@@ -110,19 +110,34 @@ class Arg(base.Arg):
     def c_local_tensor_name(self):
         return self.c_kernel_arg_name()
 
-    def c_kernel_arg(self, count):
+    def c_kernel_arg(self, count, extents=None):
         if self._uses_itspace:
             if self._is_mat:
                 if self.data._is_vector_field:
-                    return self.c_kernel_arg_name()
-                elif self.data._is_scalar_field:
-                    idx = ''.join(["[i_%d]" % i for i, _ in enumerate(self.data.dims)])
-                    return "(%(t)s (*)[1])&%(name)s%(idx)s" % \
-                        {'t': self.ctype,
-                         'name': self.c_kernel_arg_name(),
-                         'idx': idx}
+                    if self._flatten:
+                        # FFC provides the local tensor in:
+                        # XX
+                        # XX
+                        #   YY
+                        #   YY
+                        # order, but for block insertion we want it to be interleaved XY.
+                        # This horrible indexing expression maps from the former to the latter by
+                        # passing the correct local tensor address into the kernel.
+                        idx = ''.join(["[i_%(i)d + (i_%(i)d %% %(e)d) - (%(e)d-1) * (i_%(i)d/%(e)d)]" %
+                                       {'i': i, 'e': e} for i, e
+                                       in enumerate(extents)])
+                        #idx = ''.join(["[i_%d]" % i for i, _ in enumerate(self.data.dims)])
+                        dim = 1
+                    else:
+                        raise RuntimeError("Assembling vector matrices without flatten is unsupported")
                 else:
-                    raise RuntimeError("Don't know how to pass kernel arg %s" % self)
+                    idx = ''.join(["[i_%d]" % i for i, _ in enumerate(self.data.dims)])
+                    dim = 1
+                return "(%(t)s (*)[%(dim)d])&%(name)s%(idx)s" % \
+                    {'dim': dim,
+                     't': self.ctype,
+                     'name': self.c_kernel_arg_name(),
+                     'idx': idx}
             else:
                 if self.data is not None and self.data.dataset.set.layers > 1:
                     return self.c_ind_data_xtr("i_%d" % self.idx.index)
@@ -164,7 +179,7 @@ class Arg(base.Arg):
                             'data': self.c_ind_data(idx)})
         return ";\n".join(val)
 
-    def c_addto_scalar_field(self, extruded):
+    def c_addto(self, extruded):
         maps = as_tuple(self.map, Map)
         nrows = maps[0].arity
         ncols = maps[1].arity
@@ -175,7 +190,7 @@ class Arg(base.Arg):
             rows_str = extruded + self.c_map_name(0)
             cols_str = extruded + self.c_map_name(1)
 
-        return 'addto_vector(%(mat)s, %(vals)s, %(nrows)s, %(rows)s, %(ncols)s, %(cols)s, %(insert)d)' % \
+        return 'addto(%(mat)s, %(vals)s, %(nrows)s, %(rows)s, %(ncols)s, %(cols)s, %(insert)d)' % \
             {'mat': self.c_arg_name(),
              'vals': self.c_kernel_arg_name(),
              'nrows': nrows,
@@ -184,73 +199,16 @@ class Arg(base.Arg):
              'cols': cols_str,
              'insert': self.access == WRITE}
 
-    def c_addto_vector_field(self):
-        maps = as_tuple(self.map, Map)
-        nrows = maps[0].arity
-        ncols = maps[1].arity
-        dims = self.data.sparsity.dims
-        rmult = dims[0]
-        cmult = dims[1]
-        s = []
-        if self._flatten:
-            idx = '[0][0]'
-            val = "&%s%s" % (self.c_kernel_arg_name(), idx)
-            row = "%(m)s * %(map)s[i * %(dim)s + i_0 %% %(dim)s] + (i_0 / %(dim)s)" % \
-                  {'m': rmult,
-                   'map': self.c_map_name(idx=0),
-                   'dim': nrows}
-            col = "%(m)s * %(map)s[i * %(dim)s + i_1 %% %(dim)s] + (i_1 / %(dim)s)" % \
-                  {'m': cmult,
-                   'map': self.c_map_name(idx=1),
-                   'dim': ncols}
-            return 'addto_scalar(%s, %s, %s, %s, %d)' \
-                % (self.c_arg_name(), val, row, col, self.access == WRITE)
-        for i in xrange(rmult):
-            for j in xrange(cmult):
-                idx = '[%d][%d]' % (i, j)
-                val = "&%s%s" % (self.c_kernel_arg_name(), idx)
-                row = "%(m)s * %(map)s[i * %(dim)s + i_0] + %(i)s" % \
-                      {'m': rmult,
-                       'map': self.c_map_name(idx=0),
-                       'dim': nrows,
-                       'i': i}
-                col = "%(m)s * %(map)s[i * %(dim)s + i_1] + %(j)s" % \
-                      {'m': cmult,
-                       'map': self.c_map_name(idx=1),
-                       'dim': ncols,
-                       'j': j}
-
-                s.append('addto_scalar(%s, %s, %s, %s, %d)'
-                         % (self.c_arg_name(), val, row, col, self.access == WRITE))
-        return ';\n'.join(s)
-
     def c_local_tensor_dec(self, extents):
         t = self.data.ctype
-        if self.data._is_scalar_field:
-            dims = ''.join(["[%d]" % d for d in extents])
-        elif self.data._is_vector_field:
-            dims = ''.join(["[%d]" % d for d in self.data.dims])
-            if self._flatten:
-                dims = '[1][1]'
-        else:
-            raise RuntimeError("Don't know how to declare temp array for %s" % self)
+        dims = ''.join(["[%d]" % (e*dim,) for e, dim in zip(extents, self.data.dims)])
         return "%s %s%s" % (t, self.c_local_tensor_name(), dims)
 
-    def c_zero_tmp(self):
+    def c_zero_tmp(self, extents):
         t = self.ctype
-        if self.data._is_scalar_field:
-            idx = ''.join(["[i_%d]" % i for i, _ in enumerate(self.data.dims)])
-            return "%(name)s%(idx)s = (%(t)s)0" % \
-                {'name': self.c_kernel_arg_name(), 't': t, 'idx': idx}
-        elif self.data._is_vector_field:
-            if self._flatten:
-                return "%(name)s[0][0] = (%(t)s)0" % \
-                    {'name': self.c_kernel_arg_name(), 't': t}
-            size = np.prod(self.data.dims)
-            return "memset(%(name)s, 0, sizeof(%(t)s) * %(size)s)" % \
-                {'name': self.c_kernel_arg_name(), 't': t, 'size': size}
-        else:
-            raise RuntimeError("Don't know how to zero temp array for %s" % self)
+        size = np.prod([e*dim for e, dim in zip(extents, self.data.dims)])
+        return "memset(%(name)s, 0, sizeof(%(t)s) * %(size)s)" % \
+            {'name': self.c_kernel_arg_name(), 't': t, 'size': size}
 
     def c_add_offset(self):
         return '\n'.join(["%(name)s[%(j)d] += _off%(num)s[%(j)d] * %(dim)s;" %
@@ -432,7 +390,7 @@ class JITModule(base.JITModule):
             [arg.c_local_tensor_dec(self._extents) for arg in self._args if arg._is_mat])
         _wrapper_decs = ';\n'.join([arg.c_wrapper_dec() for arg in self._args])
 
-        _kernel_user_args = [arg.c_kernel_arg(count)
+        _kernel_user_args = [arg.c_kernel_arg(count, self._extents)
                              for count, arg in enumerate(self._args)]
         _kernel_it_args = ["i_%d" % d for d in range(len(self._extents))]
         _kernel_args = ', '.join(_kernel_user_args + _kernel_it_args)
@@ -455,12 +413,10 @@ class JITModule(base.JITModule):
                                     for i, e in enumerate(extents)])
         _itspace_loop_close = '\n'.join('  ' * i + '}' for i in range(nloops - 1, -1, -1))
 
-        _addtos_vector_field = ';\n'.join([arg.c_addto_vector_field() for arg in self._args
-                                           if arg._is_mat and arg.data._is_vector_field])
-        _addtos_scalar_field = ';\n'.join([arg.c_addto_scalar_field(None) for arg in self._args
-                                           if arg._is_mat and arg.data._is_scalar_field])
+        _addtos = ';\n'.join([arg.c_addto(None)
+                              for arg in self._args if arg._is_mat])
 
-        _zero_tmps = ';\n'.join([arg.c_zero_tmp() for arg in self._args if arg._is_mat])
+        _zero_tmps = ';\n'.join([arg.c_zero_tmp(self._extents) for arg in self._args if arg._is_mat])
 
         if len(Const._defs) > 0:
             _const_args = ', '
@@ -501,9 +457,9 @@ class JITModule(base.JITModule):
             _map_decl += ';\n'.join([arg.c_map_decl_itspace() for arg in self._args
                                      if arg._uses_itspace and not arg._is_mat])
 
-            _addtos_scalar_field_extruded = ';\n'.join([arg.c_addto_scalar_field("xtr_") for arg in self._args
-                                                        if arg._is_mat and arg.data._is_scalar_field])
-            _addtos_scalar_field = ""
+            _addtos_extruded = ';\n'.join([arg.c_addto("xtr_") for arg in self._args
+                                           if arg._is_mat])
+            _addtos = ""
 
             _extr_loop = '\n' + extrusion_loop(self._layers - 1)
             _extr_loop_close = '}\n'
@@ -512,7 +468,7 @@ class JITModule(base.JITModule):
             _off_inits = ""
             _extr_loop = ""
             _extr_loop_close = ""
-            _addtos_scalar_field_extruded = ""
+            _addtos_extruded = ""
             _map_decl = ""
             _map_init = ""
 
@@ -533,8 +489,7 @@ class JITModule(base.JITModule):
                 'vec_inits': indent(_vec_inits, 5),
                 'zero_tmps': indent(_zero_tmps, 2 + nloops),
                 'kernel_args': _kernel_args,
-                'addtos_vector_field': indent(_addtos_vector_field, 2 + nloops),
-                'addtos_scalar_field': indent(_addtos_scalar_field, 2),
+                'addtos': indent(_addtos, 2),
                 'apply_offset': indent(_apply_offset, 3),
                 'off_args': _off_args,
                 'off_inits': indent(_off_inits, 1),
@@ -543,6 +498,6 @@ class JITModule(base.JITModule):
                 'interm_globals_decl': indent(_intermediate_globals_decl, 3),
                 'interm_globals_init': indent(_intermediate_globals_init, 3),
                 'interm_globals_writeback': indent(_intermediate_globals_writeback, 3),
-                'addtos_scalar_field_extruded': indent(_addtos_scalar_field_extruded, 2 + nloops),
+                'addtos_extruded': indent(_addtos_extruded, 2 + nloops),
                 'map_init': indent(_map_init, 5),
                 'map_decl': indent(_map_decl, 1)}

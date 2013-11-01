@@ -367,44 +367,6 @@ void rhs_ffc_itspace(double A[1], double *x[2], double **w0, int j)
 
 
 @pytest.fixture
-def mass_vector_ffc():
-    kernel_code = """
-void mass_vector_ffc(double A[2][2], double *x[2], int j, int k)
-{
-    const double J_00 = x[1][0] - x[0][0];
-    const double J_01 = x[2][0] - x[0][0];
-    const double J_10 = x[1][1] - x[0][1];
-    const double J_11 = x[2][1] - x[0][1];
-
-    double detJ = J_00*J_11 - J_01*J_10;
-    const double det = fabs(detJ);
-
-    const double W3[3] = {0.166666666666667, 0.166666666666667, 0.166666666666667};
-    const double FE0_C0[3][6] =
-    {{0.666666666666667, 0.166666666666667, 0.166666666666667, 0.0, 0.0, 0.0},
-    {0.166666666666667, 0.166666666666667, 0.666666666666667, 0.0, 0.0, 0.0},
-    {0.166666666666667, 0.666666666666667, 0.166666666666667, 0.0, 0.0, 0.0}};
-    const double FE0_C1[3][6] =
-    {{0.0, 0.0, 0.0, 0.666666666666667, 0.166666666666667, 0.166666666666667},
-    {0.0, 0.0, 0.0, 0.166666666666667, 0.166666666666667, 0.666666666666667},
-    {0.0, 0.0, 0.0, 0.166666666666667, 0.666666666666667, 0.166666666666667}};
-
-    for (unsigned int ip = 0; ip < 3; ip++)
-    {
-      for (unsigned int r = 0; r < 2; r++)
-      {
-        for (unsigned int s = 0; s < 2; s++)
-        {
-          A[r][s] += (((FE0_C0[ip][r*3+j]))*((FE0_C0[ip][s*3+k])) + ((FE0_C1[ip][r*3+j]))*((FE0_C1[ip][s*3+k])))*W3[ip]*det;
-        }
-      }
-    }
-}
-"""
-    return op2.Kernel(kernel_code, "mass_vector_ffc")
-
-
-@pytest.fixture
 def rhs_ffc_vector():
     kernel_code = """
 void rhs_vector_ffc(double **A, double *x[2], double **w0)
@@ -542,58 +504,12 @@ void kernel_set(double entry[1][1], double* g, int i, int j)
 
 
 @pytest.fixture
-def kernel_inc_vec():
-    kernel_code = """
-void kernel_inc_vec(double entry[2][2], double* g, int i, int j)
-{
-  entry[0][0] += *g;
-  entry[0][1] += *g;
-  entry[1][0] += *g;
-  entry[1][1] += *g;
-}
-"""
-    return op2.Kernel(kernel_code, "kernel_inc_vec")
-
-
-@pytest.fixture
-def kernel_set_vec():
-    kernel_code = """
-void kernel_set_vec(double entry[2][2], double* g, int i, int j)
-{
-  entry[0][0] = *g;
-  entry[0][1] = *g;
-  entry[1][0] = *g;
-  entry[1][1] = *g;
-}
-"""
-    return op2.Kernel(kernel_code, "kernel_set_vec")
-
-
-@pytest.fixture
 def expected_matrix():
         expected_vals = [(0.25, 0.125, 0.0, 0.125),
                          (0.125, 0.291667, 0.0208333, 0.145833),
                          (0.0, 0.0208333, 0.0416667, 0.0208333),
                          (0.125, 0.145833, 0.0208333, 0.291667)]
         return np.asarray(expected_vals, dtype=valuetype)
-
-
-@pytest.fixture
-def expected_vector_matrix():
-    expected_vals = [(0.25, 0., 0.125, 0., 0., 0., 0.125, 0.),
-                     (0., 0.25, 0., 0.125, 0., 0., 0., 0.125),
-                     (0.125, 0., 0.29166667, 0.,
-                      0.02083333, 0., 0.14583333, 0.),
-                     (0., 0.125, 0., 0.29166667, 0.,
-                      0.02083333, 0., 0.14583333),
-                     (0., 0., 0.02083333, 0.,
-                      0.04166667, 0., 0.02083333, 0.),
-                     (0., 0., 0., 0.02083333, 0.,
-                      0.04166667, 0., 0.02083333),
-                     (0.125, 0., 0.14583333, 0.,
-                      0.02083333, 0., 0.29166667, 0.),
-                     (0., 0.125, 0., 0.14583333, 0., 0.02083333, 0., 0.29166667)]
-    return np.asarray(expected_vals, dtype=valuetype)
 
 
 @pytest.fixture
@@ -714,32 +630,16 @@ void zero_mat(double local_mat[1][1], int i, int j)
                      mat(op2.INC, (elem_node[op2.i[0]], elem_node[op2.i[1]])),
                      g(op2.READ))
         # Check we have ones in the matrix
-        assert mat.array.sum() == 3 * 3 * elements.size
+        assert mat.values.sum() == 3 * 3 * elements.size
         op2.par_loop(kernel_set, elements,
                      mat(op2.WRITE, (elem_node[op2.i[0]], elem_node[op2.i[1]])),
                      g(op2.READ))
         # Check we have set all values in the matrix to 1
-        assert_allclose(mat.array, np.ones_like(mat.array))
+        expected = np.ones_like(mat.values)
+        expected[0, 2] = 0
+        expected[2, 0] = 0
+        assert_allclose(mat.values, expected)
         mat.zero()
-
-    def test_set_matrix_vec(self, backend, vecmat, elements, elem_node,
-                            kernel_inc_vec, kernel_set_vec, g, skip_cuda):
-        """Test accessing a vector matrix with the WRITE access by adding some
-        non-zero values into the matrix, then setting them back to zero with a
-        kernel using op2.WRITE"""
-        op2.par_loop(kernel_inc_vec, elements,
-                     vecmat(op2.INC,
-                            (elem_node[op2.i[0]], elem_node[op2.i[1]])),
-                     g(op2.READ))
-        # Check we have ones in the matrix
-        assert vecmat.array.sum() == 2 * 2 * 3 * 3 * elements.size
-        op2.par_loop(kernel_set_vec, elements,
-                     vecmat(op2.WRITE,
-                            (elem_node[op2.i[0]], elem_node[op2.i[1]])),
-                     g(op2.READ))
-        # Check we have set all values in the matrix to 1
-        assert_allclose(vecmat.array, np.ones_like(vecmat.array))
-        vecmat.zero()
 
     def test_zero_rhs(self, backend, b, zero_dat, nodes):
         """Test that the RHS is zeroed correctly."""
@@ -755,16 +655,6 @@ void zero_mat(double local_mat[1][1], int i, int j)
                      coords(op2.READ, elem_node))
         eps = 1.e-5
         assert_allclose(mat.values, expected_matrix, eps)
-
-    def test_assemble_vec_mass(self, backend, mass_vector_ffc, vecmat, coords,
-                               elements, expected_vector_matrix, elem_node):
-        """Test that the FFC vector mass assembly assembles the correct values."""
-        op2.par_loop(mass_vector_ffc, elements,
-                     vecmat(op2.INC,
-                            (elem_node[op2.i[0]], elem_node[op2.i[1]])),
-                     coords(op2.READ, elem_node))
-        eps = 1.e-6
-        assert_allclose(vecmat.values, expected_vector_matrix, eps)
 
     def test_rhs_ffc(self, backend, rhs_ffc, elements, b, coords, f,
                      elem_node, expected_rhs):
@@ -844,13 +734,6 @@ void zero_mat(double local_mat[1][1], int i, int j)
         mat.zero_rows([which], 4.0)
         eps = 1.e-5
         assert_allclose(mat.values, expected_matrix, eps)
-
-    def test_vector_solve(self, backend, vecmat, b_vec, x_vec, f_vec):
-        """Solve a linear system with a vector matrix where the solution is
-        equal to the right-hand side and check the result."""
-        op2.solve(vecmat, x_vec, b_vec)
-        eps = 1.e-12
-        assert_allclose(x_vec.data, f_vec.data, eps)
 
     def test_zero_vector_matrix(self, backend, vecmat):
         """Test that the vector matrix is zeroed correctly."""

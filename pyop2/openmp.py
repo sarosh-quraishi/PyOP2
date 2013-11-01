@@ -182,15 +182,14 @@ void wrap_%(kernel_name)s__(PyObject* _boffset,
         %(vec_inits)s;
         %(map_init)s;
         %(extr_loop)s
-        %(itspace_loops)s
         %(zero_tmps)s;
+        %(itspace_loops)s
         %(kernel_name)s(%(kernel_args)s);
-        %(addtos_vector_field)s;
         %(itspace_loop_close)s
-        %(ind)s%(addtos_scalar_field_extruded)s;
+        %(ind)s%(addtos_extruded)s;
         %(apply_offset)s
         %(extr_loop_close)s
-        %(addtos_scalar_field)s;
+        %(addtos)s;
       }
     }
     %(interm_globals_writeback)s;
