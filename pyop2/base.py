@@ -55,8 +55,8 @@ class LazyComputation(object):
     """
 
     def __init__(self, reads, writes):
-        self.reads = set(flatten(reads))
-        self.writes = set(flatten(writes))
+        self.reads = to_set(reads)
+        self.writes = to_set(writes)
         self._scheduled = False
 
     def enqueue(self):
@@ -224,20 +224,8 @@ class ExecutionTrace(object):
                      :class:`DataCarrier` (and any other dependent computation).
         """
 
-        if reads is not None:
-            try:
-                reads = set(flatten(reads))
-            except TypeError:       # not an iterable
-                reads = set([reads])
-        else:
-            reads = set()
-        if writes is not None:
-            try:
-                writes = set(flatten(writes))
-            except TypeError:
-                writes = set([writes])
-        else:
-            writes = set()
+        reads = to_set(reads)
+        writes = to_set(writes)
 
         def _depends_on(reads, writes, cont):
             return reads & cont.writes or writes & cont.reads or writes & cont.writes
@@ -2121,7 +2109,7 @@ class Const(DataCarrier):
         """Remove this Const object from the namespace
 
         This allows the same name to be redeclared with a different shape."""
-        _trace.evaluate(set(), set([self]))
+        _trace.evaluate(writes=self)
         Const._defs.discard(self)
 
     def _format_declaration(self):
@@ -2221,7 +2209,7 @@ class Global(DataCarrier, _EmptyDataMixin):
     @property
     def data(self):
         """Data array."""
-        _trace.evaluate(set([self]), set())
+        _trace.evaluate(reads=self)
         if len(self._data) is 0:
             raise RuntimeError("Illegal access: No data associated with this Global!")
         return self._data
@@ -2237,7 +2225,7 @@ class Global(DataCarrier, _EmptyDataMixin):
 
     @data.setter
     def data(self, value):
-        _trace.evaluate(set(), set([self]))
+        _trace.evaluate(writes=self)
         self._data = verify_reshape(value, self.dtype, self.dim)
 
     @property
@@ -3061,18 +3049,18 @@ class ParLoop(object):
                     writes.append(arg.data)
             elif arg._is_mat:
                 if arg.access in [READ, RW, INC]:
-                    reads.append(arg.data)
+                    reads.extend(arg.data)
                 if arg.access in [WRITE, RW, INC]:
-                    writes.append(arg.data)
+                    writes.extend(arg.data)
             elif arg._is_dat:
                 if arg.access in [READ, RW]:
-                    reads.append(direct(arg.data))
+                    reads.extend([direct(d) for d in arg.data])
                     if not arg._is_direct:
-                        reads.extend([n(arg.data) for n in neighboor])
+                        reads.extend([n(d) for d in arg.data for n in neighboor])
                 if arg.access in [RW, WRITE, INC, MIN, MAX]:
-                    writes.append(direct(arg.data))
+                    writes.extend([direct(d) for d in arg.data])
                     if not arg._is_direct:
-                        writes.extend([n(arg.data) for n in neighboor])
+                        writes.extend([n(d) for d in arg.data for n in neighboor])
 
         if part.size > 0:
             LazyMethodCall(set(reads) | Const._defs,
@@ -3150,8 +3138,8 @@ class ParLoop(object):
     def _spawn_assemble(self):
         for arg in self.args:
             if arg._is_mat:
-                LazyMethodCall(set([arg.data]),
-                               set([arg.data]),
+                LazyMethodCall([m for m in arg.data],
+                               [m for m in arg.data],
                                arg.data._assemble).enqueue()
 
     def build_itspace(self, iterset):
@@ -3312,7 +3300,14 @@ class Solver(object):
         :arg x: The :class:`Dat` to receive the solution.
         :arg b: The :class:`Dat` containing the RHS.
         """
-        _trace.evaluate(set([A] + ALL(b)), set(ALL(x)))
+        reads = list(A)
+        for rhs in b:
+            reads.extend(ALL(rhs))
+        writes = list()
+        for s in x:
+            writes.extend(ALL(s))
+
+        _trace.evaluate(reads, writes)
         self._solve(A, x, b)
 
     def _solve(self, A, x, b):

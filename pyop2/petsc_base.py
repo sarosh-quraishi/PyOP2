@@ -350,7 +350,7 @@ class Mat(base.Mat):
 
     @property
     def values(self):
-        base._trace.evaluate(set([self]), set())
+        base._trace.evaluate(reads=[s for s in self])
         return self.handle[:, :]
 
     @property
