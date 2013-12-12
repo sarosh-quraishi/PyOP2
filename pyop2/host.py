@@ -110,8 +110,6 @@ class Arg(base.Arg):
                 for j in range(len(map)):
                     val += ";\nint *%(name)s = (int *)(((PyArrayObject *)_%(name)s)->data)" \
                         % {'name': self.c_map_name(i, j)}
-        if self._is_vec_map:
-            val += self.c_vec_dec()
         return val
 
     def c_ind_data(self, idx, i, j=0):
@@ -371,24 +369,6 @@ for ( int i = 0; i < %(dim)s; i++ ) %(combine)s;
                             'dim_row': str(m.arity * cdim) if self._flatten else str(m.arity)})
         return '\n'.join(val)+'\n'
 
-    def c_map_private(self):
-        maps = as_tuple(self.map, Map)
-        val = []
-        for i, map in enumerate(maps):
-            for j, m in enumerate(map):
-                val.append("xtr_%(name)s" %
-                           {'name': self.c_map_name(i, j)})
-        return ', '.join(val)
-
-    def c_map_private_itspace(self):
-        maps = as_tuple(self.map, Map)
-        val = []
-        for i, map in enumerate(maps):
-            for j, m in enumerate(map):
-                val.append("xtr_%(name)s" %
-                           {'name': self.c_map_name(i, j)})
-        return ', '.join(val)
-
     def c_map_init_flattened(self):
         cdim = np.prod(self.data.cdim)
         maps = as_tuple(self.map, Map)
@@ -597,6 +577,8 @@ class JITModule(base.JITModule):
 
         _wrapper_decs = ';\n'.join([arg.c_wrapper_dec() for arg in self._args])
 
+        _vec_decs = ';\n'.join([arg.c_vec_dec() for arg in self._args if arg._is_vec_map])
+
         if len(Const._defs) > 0:
             _const_args = ', '
             _const_args += ', '.join([c_const_arg(c) for c in Const._definitions()])
@@ -619,9 +601,6 @@ class JITModule(base.JITModule):
 
         _vec_inits = ';\n'.join([arg.c_vec_init() for arg in self._args
                                  if not arg._is_mat and arg._is_vec_map])
-
-        _arg_vec_content = ', '.join([arg.c_vec_name() for arg in self._args
-                                      if arg._is_vec_map and not arg._is_mat])
 
         indent = lambda t, i: ('\n' + '  ' * i).join(t.split('\n'))
 
@@ -664,26 +643,9 @@ class JITModule(base.JITModule):
                                          if arg._is_vec_map and not arg._flatten])
             _extr_loop = '\n' + extrusion_loop()
             _extr_loop_close = '}\n'
-
-            _xtr_map_content = ', '.join([arg.c_map_private_itspace() for arg in self._args
-                                          if arg._uses_itspace and not arg._is_mat])
-            _xtr_map_content += ', '.join([arg.c_map_private() for arg in self._args
-                                           if arg._is_mat])
         else:
             _off_args = ""
             _off_inits = ""
-            _privates = ""
-            _xtr_map_content = ""
-
-        _privates = ' private('
-        if _xtr_map_content != '':
-            _privates += _xtr_map_content
-        if _arg_vec_content != '':
-            if _xtr_map_content != '':
-                _privates += ', '
-            _privates += _arg_vec_content + ')'
-        if _arg_vec_content == '' and _xtr_map_content == '':
-            _privates = ''
 
         def itset_loop_body(i, j, shape, offsets):
             nloops = len(shape)
@@ -748,7 +710,7 @@ class JITModule(base.JITModule):
                 'layer_arg': _layer_arg,
                 'layer_arg_init': indent(_layer_arg_init, 1),
                 'map_decl': indent(_map_decl, 2),
-                'privates': _privates,
+                'vec_decs': indent(_vec_decs, 1),
                 'map_init': indent(_map_init, 5),
                 'apply_offset': indent(_apply_offset, 3),
                 'extr_loop': indent(_extr_loop, 5),

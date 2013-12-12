@@ -161,12 +161,14 @@ void wrap_%(kernel_name)s__(PyObject* _boffset,
   int nthread = 1;
   #endif
 
-  #pragma omp parallel shared(boffset, nblocks, nelems, blkmap) %(privates)s
+  #pragma omp parallel shared(boffset, nblocks, nelems, blkmap)
   {
     %(map_decl)s
     int tid = omp_get_thread_num();
     %(interm_globals_decl)s;
     %(interm_globals_init)s;
+    %(map_decl)s
+    %(vec_decs)s;
 
     #pragma omp for schedule(static)
     for ( int __b = boffset; __b < boffset + nblocks; __b++ )
