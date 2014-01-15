@@ -13,6 +13,7 @@ Contents:
 
    installation
    user
+   pyop2_ir_user
    pyop2
 
 
