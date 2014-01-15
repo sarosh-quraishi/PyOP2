@@ -38,9 +38,11 @@ class LoopOptimiser(object):
 
     """Many loop optimisations, specifically important for the class of Finite
     Element kernels, must be supported. Among them we have:
+
     * Loop Invariant Code Motion
     * Register Tiling
     * Loop Interchange
+
     Others, like loop unrolling, can be achieved by simply relying on the
     backend compiler and/or specific compiler options, and therefore not
     explicitely supported.
@@ -56,9 +58,10 @@ class LoopOptimiser(object):
 
     def _visit_nest(self, node):
         """Explore the loop nest and collect various info like:
-            - Loops
-            - Declarations and Symbols
-            - Optimisations requested by the higher layers via pragmas"""
+
+        * Loops
+        * Declarations and Symbols
+        * Optimisations requested by the higher layers via pragmas"""
 
         def check_opts(node, parent):
             """Check if node is associated some pragma. If that is the case,
@@ -119,8 +122,8 @@ class LoopOptimiser(object):
 
     def extract_itspace(self):
         """Remove fully-parallel loop from the iteration space. These are
-        the loops that were marked by the user/higher layer with a 'pragma
-        pyop2 itspace'."""
+        the loops that were marked by the user/higher layer with a ``pragma
+        pyop2 itspace``."""
 
         itspace_vrs = []
         for node, parent in reversed(self.itspace):
