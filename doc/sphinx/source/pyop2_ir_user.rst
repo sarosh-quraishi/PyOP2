@@ -1,10 +1,11 @@
 The PyOP2 Kernel Interface
 ==========================
 
-The :class:`pyop2.ParLoop` is the main construct of PyOP2. It applies a specific
-:class:`pyop2.Kernel` to all elements in the iteration set of the parallel loop. Here, we
-describe how to use the PyOP2 API to build a ``Kernel`` and, also, we provide
-simple guidelines on how to write efficient kernels.
+The :class:`parallel loop <pyop2.ParLoop>` is the main construct of PyOP2.
+It applies a specific :class:`kernel <pyop2.Kernel>` to all elements in the
+iteration set of the parallel loop. Here, we describe how to use the PyOP2 API
+to build a kernel and, also, we provide simple guidelines on how to write
+efficient kernels.
 
 
 Kernel API
@@ -16,8 +17,8 @@ A ``Kernel`` is composed of three parts:
 * A ``name``, which has to be identical to that in the kernel signature
 * An optional set of parameters, ``opts``, to drive the optimization process
 
-For example, to build a PyOP2 ``Kernel`` that initialises to 0 a certain dataset
-associated to the edges of the mesh, one can write:
+For example, to build a PyOP2 kernel that initialises a certain dataset
+associated with the edges of the mesh to zero, one can write:
 
 .. code-block:: python
 
@@ -43,16 +44,16 @@ Passing in a string of C code is the simplest way of creating a ``Kernel``.
 Another possibility is to use PyOP2 Intermediate Representation (IR) objects
 to express the ``Kernel`` semantics. 
 An Abstract Syntax Tree of the kernel code can be manually built using IR
-objects. Since PyOP2 has been primarily thought to be fed by the higher layers
-of abstractions of the framework, rather than by users, no parser has been
-provided. The advantage of providing an AST, instead of C code, is that it
-enables PyOP2 inspecting and transforming the kernel, which is aimed at
-achieving performance portability among different architectures and, more in
-general, better execution times.
+objects. Since PyOP2 has been primarily thought to be fed by higher layers
+of abstractions, rather than by users, no C-to-AST parser is currently provided.
+The advantage of providing an AST, instead of C code, is that it enables PyOP2
+to inspect and transform the kernel, which is aimed at achieving performance
+portability among different architectures and, more in general, better execution
+times.
 
 Here, we describe how we can use PyOP2 IR objects to build an AST for the
-``init`` kernel shown previously. A large number of ASTs can be obviously
-constructued. For example, the most basic AST one can come up with is
+``init`` kernel shown previously. For example, the most basic AST one can come
+up with is
 
 .. code-block:: python
 
@@ -65,8 +66,8 @@ constructued. For example, the most basic AST one can come up with is
   }""")
   kernel = Kernel(ast, "init")
 
-The :class:`pyop2.ir.FlatBlock` object encapsulates a ''flat'' block of code,
-which can not be modified by the IR engine. A ``FlatBlock`` is used to
+The :class:`FlatBlock <pyop2.ir.FlatBlock>` object encapsulates a ''flat'' block
+of code, which is not modified by the IR engine. A ``FlatBlock`` is used to
 represent (possibly large) fragments of code for which we are not interested
 in any kind of transformations, so it may be particularly useful to speed up
 code development when writing, for example, test cases or non-expensive kernels.
@@ -87,16 +88,16 @@ a ''real'' AST. For example, an useful AST for ``init`` could be the following
 
 In this example, we first construct the body of the kernel function. We have an
 initial ``FlatBlock`` that contains, for instance, some sort of initializing
-code. ``c_for`` is a shortcut for building :class:`pyop2.ir.For`. It takes an
-iteration variable (``i``), the extent of the loop and its body. Multiple
-statements in the body can be passed in as a list. ``c_sym`` is a shortcut
-for :class:`pyop2.ir.Symbol`. It is used to build symbols. You may want to
-use ``c_sym`` when the symbol makes no explicit use of iteration variables.
+code. ``c_for`` is a shortcut for building a :class:`for loop <pyop2.ir.For>`.
+It takes an iteration variable (``i``), the extent of the loop and its body.
+Multiple statements in the body can be passed in as a list. ``c_sym`` is a shortcut
+for building :class:`symbols <pyop2.ir.Symbol>`. You may want to use ``c_sym``
+when the symbol makes no explicit use of iteration variables. 
 We use ``Symbol``, instead of ``c_sym``,  when ``edge_weight`` accesses a specific
 element using the iteration variable ``i``. This is fundamental to allow the
 IR engine performing many kind of transformations involving the kernel's
 iteration space(s). Finally, the signature of the function is constructed using
-:class:`pyop2.ir.FunDecl`.
+the :class:`FunDecl <pyop2.ir.FunDecl>`.
 
 Other examples on how to build ASTs can be found in the tests folder,
 particularly looking into ``test_matrices.py`` and
@@ -219,7 +220,7 @@ PyOP2 currently lacks an autotuning system that finds out automatically the
 best possible kernel implementation, that is the optimizations that minimize
 the kernel run-time. To drive the optimization process, the user (or the
 higher layer) can specifiy which optimizations should be applied. Currently,
-PyOP2 can automatize:
+PyOP2 can automate:
 
 * Alignment and padding of data structures: for issuing aligned loads and stores.
 * Loop trip count adjustment according to padding: useful for autovectorization
@@ -284,7 +285,7 @@ iteration space is smaller than the slice, then the transformation is not
 applied. By specifying ``-1`` instead of ``8``, we leave PyOP2 free to choose
 automatically a certain tile size.
 
-A fundamental optimizations for any PyOP2 kernel is SIMD vectorization. This is
+A fundamental optimization for any PyOP2 kernel is SIMD vectorization. This is
 because almost always kernels fit the L1 cache and are likely to be compute-
 bound. Backend compilers' AutoVectorization (AV) is therefore an opportunity.
 By enforcing data alignment and padding, we can increase the chance AV is
