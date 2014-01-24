@@ -294,35 +294,53 @@ class LoopOptimiser(object):
 
         return ext_loops
 
-    def op_interchange(self, decl_scope):
-        """Interchange outer product loops based on amount of redundancy."""
+    def op_split(self):
+        """Split outer product RHS based on amount of computation."""
+        
+        depth = 4
 
+        def split_sum(node, parent, is_left, found, sum_count):
+            if isinstance(node, Symbol):
+                return False
+            elif isinstance(node, Par) and found:
+                return False
+            elif isinstance(node, Par) and not found:
+                split_sum(node.children[0], (node, 0), is_left, found, sum_count)
+            elif isinstance(node, Prod) and found:
+                return False
+            elif isinstance(node, Prod) and not found:
+                if not split_sum(node.children[0], (node, 0), is_left, found, sum_count):
+                    return split_sum(node.children[1], (node, 1), is_left, found, sum_count)
+                return True
+            elif isinstance(node, Sum):
+                sum_count += 1
+                if not found:
+                    found = parent
+                if sum_count == depth:
+                    if is_left:
+                        parent, parent_leaf = parent
+                        parent.children[parent_leaf] = node.children[0]
+                    else:
+                        found, found_leaf = found
+                        found.children[found_leaf] = node.children[1]
+                    return True
+                else:
+                    if not split_sum(node.children[0], (node, 0), is_left, found, sum_count):
+                        return split_sum(node.children[1], (node, 1), is_left, found, sum_count)
+                    return True
+            else:
+                raise RuntimeError("Splitting expression, shouldn't be here.")
+                
         if not self.out_prods:
             return
 
-        n_outer = 0
-        n_inner = 0
-        acc_decls = [d[0].sym.symbol for s, d in decl_scope.items() if d[1] != ast_plan.PARAM_VAR]
-        acc_syms = [s for s in self.sym if s.symbol in acc_decls]
-        
-        for s in acc_syms:
-            if s.rank and s.rank[-1] == self.fors[-1].it_var():
-                n_inner += 1
-            elif s.rank and s.rank[-1] == self.fors[-2].it_var():
-                n_outer += 1
-
-        if n_inner >= n_outer:
-            ex_outer_loop = dcopy(self.fors[-2])
-            self.fors[-2].init.sym.symbol = self.fors[-1].init.sym.symbol
-            self.fors[-2].cond.children[0].symbol = self.fors[-1].cond.children[0].symbol
-            self.fors[-2].incr.children[0].symbol = self.fors[-1].incr.children[0].symbol
-            self.fors[-1].init.sym.symbol = ex_outer_loop.init.sym.symbol
-            self.fors[-1].cond.children[0].symbol = ex_outer_loop.cond.children[0].symbol
-            self.fors[-1].incr.children[0].symbol = ex_outer_loop.incr.children[0].symbol
-
-            acc_decls = [d[0].sym.symbol for s, d in decl_scope.items() if d[1] == ast_plan.PARAM_VAR]
-            acc_syms = [s for s in self.sym if s.symbol in acc_decls]
-            acc_syms[0].rank = (acc_syms[0].rank[1], acc_syms[0].rank[0])
+        for stmt, stmt_info in self.out_prods.items():
+            it_vars, parent = stmt_info
+            expr = Par(stmt.children[1])
+            expr_left = dcopy(expr)
+            expr_right = dcopy(expr)
+            split_sum(expr_left.children[0], (expr_left, 0), True, None, 0)
+            split_sum(expr_right.children[0], (expr_right, 0), False, None, 0)
 
 
     def op_tiling(self, tile_sz=None):
