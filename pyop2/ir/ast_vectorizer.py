@@ -102,10 +102,16 @@ class LoopVectoriser(object):
         jam factor. Note that factor is just a suggestion to the compiler,
         which can freely decide to use a higher or lower value."""
 
+        if not self.lo.out_prods:
+            return
+
         for stmt, stmt_info in self.lo.out_prods.items():
             # First, find outer product loops in the nest
             it_vars, parent = stmt_info
-            loops = [l for l in self.lo.fors if l.it_var() in it_vars]
+            #if not self.lo.op_loops:
+            #    loops = [l for l in self.lo.fors if l.it_var() in it_vars]
+            #else:
+            loops = self.lo.op_loops[stmt]
 
             vect_len = self.intr["dp_reg"]
             rows = loops[0].size()
@@ -156,10 +162,10 @@ class LoopVectoriser(object):
             ofs = blk.index(stmt)
             parent.children = blk[:ofs] + body + blk[ofs + 1:]
 
-            # Append the layout code after the loop nest
-            if layout:
-                parent = self.lo.pre_header.children
-                parent.insert(parent.index(self.lo.loop_nest) + 1, layout)
+        # Append the layout code after the loop nest
+        if layout:
+            parent = self.lo.pre_header.children
+            parent.insert(parent.index(self.lo.loop_nest) + 1, layout)
 
     def _inner_loops(self, node):
         """Find inner loops in the subtree rooted in node."""
