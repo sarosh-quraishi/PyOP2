@@ -187,7 +187,7 @@ class Solver(base.Solver):
 
 @modifies_arguments
 @collective
-def par_loop(kernel, it_space, *args):
+def par_loop(kernel, iterset, *args):
     """Invocation of an OP2 kernel
 
     :arg kernel: The :class:`Kernel` to be executed.
