@@ -45,17 +45,17 @@ nelems = 8
 
 @pytest.fixture
 def iterset():
-    return op2.Set(nelems, 1, "iterset")
+    return op2.Set(nelems, "iterset")
 
 
 @pytest.fixture
 def indset():
-    return op2.Set(nelems, 1, "indset")
+    return op2.Set(nelems, "indset")
 
 
 @pytest.fixture
 def indset2():
-    return op2.Set(nelems, 2, "indset2")
+    return op2.Set(nelems, "indset2")**2
 
 
 @pytest.fixture
@@ -107,7 +107,7 @@ def iter2ind22(iterset, indset2):
 class TestVersioning:
     @pytest.fixture
     def mat(cls, iter2ind1):
-        sparsity = op2.Sparsity((iter2ind1, iter2ind1), "sparsity")
+        sparsity = op2.Sparsity(iter2ind1.toset, iter2ind1, "sparsity")
         return op2.Mat(sparsity, 'float64', "mat")
 
     def test_initial_version(self, backend, mat, g, x):
@@ -145,7 +145,7 @@ class TestVersioning:
 class TestCopyOnWrite:
     @pytest.fixture
     def mat(cls, iter2ind1):
-        sparsity = op2.Sparsity((iter2ind1, iter2ind1), "sparsity")
+        sparsity = op2.Sparsity(iter2ind1.toset, iter2ind1, "sparsity")
         return op2.Mat(sparsity, 'float64', "mat")
 
     def test_duplicate_mat(self, backend, mat):
