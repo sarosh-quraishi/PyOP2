@@ -37,9 +37,7 @@ import cPickle
 import gzip
 import os
 from ir.ast_base import Node
-from copy import copy as shallow_copy
-import op2
-from logger import debug
+
 
 class Cached(object):
 

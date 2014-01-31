@@ -1390,7 +1390,6 @@ class DataCarrier(Versioned):
         the product of the dim tuple."""
         return self._cdim
 
-<<<<<<< HEAD
     def _force_evaluation(self, read=True, write=True):
         """Force the evaluation of any outstanding computation to ensure that this DataCarrier is up to date.
 
@@ -1436,6 +1435,7 @@ class _EmptyDataMixin(object):
         """Return True if the data buffer has been allocated."""
         return hasattr(self, '_numpy_data')
 
+
 class SetAssociated(DataCarrier):
     """Intermediate class between DataCarrier and subtypes associated with a
     Set (vectors and matrices)."""
@@ -1453,6 +1453,7 @@ class SetAssociated(DataCarrier):
             if objref is not None:
                 return self._snapshot_version == objref.vcache_get_version()
             return False
+
 
 class Dat(SetAssociated, _EmptyDataMixin, CopyOnWrite):
     """OP2 vector data. A :class:`Dat` holds values on every element of a

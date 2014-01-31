@@ -1,6 +1,6 @@
-import weakref
 from copy import copy as shallow_copy
 import op2
+
 
 class Versioned(object):
     """Versioning class for objects with mutable data"""
@@ -23,6 +23,7 @@ class Versioned(object):
     def vcache_version_set_zero(self):
         # Set version to 0 (usually when zero() is called)
         self._version = 0
+
 
 def modifies(method):
     "Decorator for methods that modify their instance's data"
@@ -51,6 +52,7 @@ def modifies(method):
 
     return inner
 
+
 def modifies_arguments(func):
     "Decorator for functions that modify their arguments' data"
     def inner(*args, **kwargs):
@@ -60,6 +62,7 @@ def modifies_arguments(func):
                 a.data.vcache_version_bump()
         return retval
     return inner
+
 
 class CopyOnWrite(object):
     """

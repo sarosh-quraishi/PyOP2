@@ -184,6 +184,7 @@ class Sparsity(base.Sparsity):
 class Solver(base.Solver):
     __metaclass__ = backends._BackendSelector
 
+
 @modifies_arguments
 @collective
 def par_loop(kernel, it_space, *args):
