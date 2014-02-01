@@ -155,7 +155,7 @@ scheduling, partitioning, colouring and staging of the data into on chip
 memory. Computations in a parallel loop must be independent of the order in
 which they are executed over the set to allow PyOP2 maximum flexibility to
 schedule the computation in the most efficient way. Kernels are described in
-more detail in :doc:`pyop2_ir_user`.
+more detail in :doc:`kernels`.
 
 A parallel loop invocation requires as arguments, other than the iteration set
 and the kernel to operate on, the data the kernel reads and/or writes. A

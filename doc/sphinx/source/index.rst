@@ -13,6 +13,7 @@ Contents:
 
    installation
    concepts
+   kernels
    user
    pyop2
 
