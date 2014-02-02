@@ -204,8 +204,8 @@ parallel loop and therefore has the access descriptor :data:`~pyop2.INC` since
 the assembly accumulates contributions from different vertices via the
 ``edges2vertices`` mapping. Note that the mappings are being indexed with the
 :class:`iteration indices <pyop2.base.IterationIndex>` ``op2.i[0]`` and
-``op2.i[1]`` respectively. This means that PyOP2 generates a *local iteration
-space* of size ``arity * arity`` with the ``arity`` of the :class:`~pyop2.Map`
+``op2.i[1]`` respectively. This means that PyOP2 generates a :ref:`local iteration
+space <local-iteration-spaces>` of size ``arity * arity`` with the ``arity`` of the :class:`~pyop2.Map`
 ``edges2vertices`` for any given element of the iteration set.  This local
 iteration spaces is then iterated over using the iteration indices on the
 maps.  The kernel is assumed to only apply to a single point in that local
