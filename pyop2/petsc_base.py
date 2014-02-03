@@ -280,7 +280,7 @@ class Mat(base.Mat, CopyOnWrite):
         # the sparsity and render our sparsity caching useless.
         mat.setOption(mat.Option.KEEP_NONZERO_PATTERN, True)
         self._handle = mat
-        #XXX XXX Is a matrix always initialized to 0? If yes, the following should be ok
+        # Matrices start zeroed.
         self.vcache_version_set_zero()
 
     def __getitem__(self, idx):
