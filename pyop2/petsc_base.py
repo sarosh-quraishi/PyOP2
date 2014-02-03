@@ -401,10 +401,6 @@ class Mat(base.Mat, CopyOnWrite):
         return self._blocks
 
     @property
-    def nbytes(self):
-        return self.array.nbytes
-
-    @property
     def array(self):
         """Array of non-zero values."""
         if not hasattr(self, '_array'):
