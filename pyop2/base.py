@@ -1733,13 +1733,6 @@ class Dat(SetAssociated, _EmptyDataMixin, CopyOnWrite):
         # Naive copy() method
         self._data = src._data.copy()
 
-    #def _cow_shallow_copy(self):
-    #    return type(self)(self._dataset, self._data, self.dtype, self.name)
-
-    @property
-    def nbytes(self):
-        return self.data.nbytes
-
     def __str__(self):
         return "OP2 Dat: %s on (%s) with datatype %s" \
                % (self._name, self._dataset, self.dtype.name)
