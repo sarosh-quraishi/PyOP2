@@ -354,11 +354,6 @@ class Mat(base.Mat, CopyOnWrite):
         self._handle = src.handle.duplicate(copy=True)
         return self
 
-    #def _cow_shallow_copy(self):
-    #    dup = type(self)(self.sparsity, self.dtype, self.name)
-    #    dup._handle = self._handle
-    #    return dup
-
     @collective
     def inc_local_diagonal_entries(self, rows, diag_val=1.0):
         """Increment the diagonal entry in ``rows`` by a particular value.
