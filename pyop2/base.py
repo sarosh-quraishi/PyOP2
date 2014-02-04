@@ -1740,7 +1740,7 @@ class Dat(SetAssociated, _EmptyDataMixin, CopyOnWrite):
         # Force the execution of the copy parloop
         self._cow_parloop._run()
         if configuration['lazy_evaluation']:
-            _trace.remove(self._cow_parloop)
+            _trace._trace.remove(self._cow_parloop)
 
     def _cow_shallow_copy(self):
 
@@ -1755,6 +1755,8 @@ class Dat(SetAssociated, _EmptyDataMixin, CopyOnWrite):
             # In the lazy case, we enqueue now to ensure we are at the
             # right point in the trace.
             other._cow_parloop.enqueue()
+
+        return other
 
     def __str__(self):
         return "OP2 Dat: %s on (%s) with datatype %s" \
